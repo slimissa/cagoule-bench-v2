@@ -82,9 +82,7 @@ jobs:
           cagoule-bench run \
             --suite encryption \
             --suite avx2 \
-            --suite parallel \
             --format json \
-            --format html \
             --output benchmark_results \
             --iterations 100 \
             --warmup 5 \
