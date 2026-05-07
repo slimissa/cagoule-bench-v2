@@ -35,12 +35,12 @@ else:
 DEFAULTS: dict[str, Any] = {
     "iterations": 500,
     "warmup": 10,
-    "suites": None,          # None = all
+    "suites": None,  # None = all
     "output_dir": "./benchmark_results",
     "regression_threshold": -5.0,
     "db_path": ".cagoule_bench/history.db",
     "formats": ["console"],
-    "sizes": None,           # None = DEFAULT_SIZES
+    "sizes": None,  # None = DEFAULT_SIZES
     "parallel_workers": None,
     "kdf_time_costs": None,
     "kdf_memory_costs": None,

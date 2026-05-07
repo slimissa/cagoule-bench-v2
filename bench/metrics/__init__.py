@@ -6,8 +6,12 @@ from bench.metrics.stats import MannWhitneyResult, StatComparison
 from bench.metrics.time_collector import TimeCollector, TimingResult
 
 __all__ = [
-    "TimeCollector", "TimingResult",
-    "MemoryCollector", "MemoryResult",
-    "CpuCollector", "CpuResult",
-    "StatComparison", "MannWhitneyResult",
+    "TimeCollector",
+    "TimingResult",
+    "MemoryCollector",
+    "MemoryResult",
+    "CpuCollector",
+    "CpuResult",
+    "StatComparison",
+    "MannWhitneyResult",
 ]

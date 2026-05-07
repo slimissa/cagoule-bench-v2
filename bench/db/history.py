@@ -34,25 +34,28 @@ SCHEMA_VERSION = 2
 
 # ── Data classes ──────────────────────────────────────────────────────────────
 
+
 @dataclass
 class RunRecord:
     """Enregistrement d'un run complet dans l'historique."""
+
     run_id: str
-    tag: str          # ex: "main", "avx2-branch", "pr-42"
+    tag: str  # ex: "main", "avx2-branch", "pr-42"
     timestamp: str
     platform: str
     arch: str
     python_version: str
     cagoule_version: str
-    cagoule_backend: str   # "avx2" | "scalar" | "mock"
+    cagoule_backend: str  # "avx2" | "scalar" | "mock"
     result_count: int
     duration_s: float
-    summary_json: str      # JSON summary des throughputs
+    summary_json: str  # JSON summary des throughputs
 
 
 @dataclass
 class TrendPoint:
     """Point de tendance pour un benchmark spécifique."""
+
     run_id: str
     timestamp: str
     tag: str
@@ -63,6 +66,7 @@ class TrendPoint:
 
 
 # ── HistoryDB ─────────────────────────────────────────────────────────────────
+
 
 class HistoryDB:
     """
@@ -163,47 +167,59 @@ class HistoryDB:
         for r in results:
             if r.throughput_mbps > 0:
                 by_algo.setdefault(r.algorithm, []).append(r.throughput_mbps)
-        summary = {
-            algo: round(sum(tps) / len(tps), 2)
-            for algo, tps in by_algo.items()
-        }
+        summary = {algo: round(sum(tps) / len(tps), 2) for algo, tps in by_algo.items()}
 
         c = self._conn.cursor()
-        c.execute("""
+        c.execute(
+            """
             INSERT INTO runs
               (run_id, tag, timestamp, platform, arch, python_version,
                cagoule_version, cagoule_backend, result_count, duration_s, summary_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            run_id, tag, ts,
-            platform.system() + "/" + platform.machine(),
-            platform.machine(),
-            platform.python_version(),
-            cagoule_version,
-            backend,
-            len(results),
-            round(duration_s, 3),
-            json.dumps(summary),
-        ))
+        """,
+            (
+                run_id,
+                tag,
+                ts,
+                platform.system() + "/" + platform.machine(),
+                platform.machine(),
+                platform.python_version(),
+                cagoule_version,
+                backend,
+                len(results),
+                round(duration_s, 3),
+                json.dumps(summary),
+            ),
+        )
 
-        c.executemany("""
+        c.executemany(
+            """
             INSERT INTO results
               (run_id, suite, name, algorithm, data_size_bytes,
                mean_ms, stddev_ms, p95_ms, p99_ms, cv_percent,
                throughput_mbps, peak_mb, cpu_mean_pct, extra_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, [
-            (
-                run_id,
-                r.suite, r.name, r.algorithm, r.data_size_bytes,
-                round(r.mean_ms, 4), round(r.stddev_ms, 4),
-                round(r.p95_ms, 4), round(r.p99_ms, 4), round(r.cv_percent, 2),
-                round(r.throughput_mbps, 3), round(r.peak_mb, 4),
-                round(r.cpu_mean_pct, 2),
-                json.dumps(r.extra),
-            )
-            for r in results
-        ])
+        """,
+            [
+                (
+                    run_id,
+                    r.suite,
+                    r.name,
+                    r.algorithm,
+                    r.data_size_bytes,
+                    round(r.mean_ms, 4),
+                    round(r.stddev_ms, 4),
+                    round(r.p95_ms, 4),
+                    round(r.p99_ms, 4),
+                    round(r.cv_percent, 2),
+                    round(r.throughput_mbps, 3),
+                    round(r.peak_mb, 4),
+                    round(r.cpu_mean_pct, 2),
+                    json.dumps(r.extra),
+                )
+                for r in results
+            ],
+        )
         self._conn.commit()
         return run_id
 
@@ -230,7 +246,8 @@ class HistoryDB:
         """
         c = self._conn.cursor()
         if tag:
-            rows = c.execute("""
+            rows = c.execute(
+                """
                 SELECT r.run_id, r.timestamp, r.tag,
                        res.mean_ms, res.throughput_mbps, res.stddev_ms, res.p95_ms
                 FROM results res
@@ -239,9 +256,12 @@ class HistoryDB:
                   AND r.tag = ?
                 ORDER BY r.timestamp DESC, r.rowid DESC
                 LIMIT ?
-            """, (suite, algorithm, name, tag, n)).fetchall()
+            """,
+                (suite, algorithm, name, tag, n),
+            ).fetchall()
         else:
-            rows = c.execute("""
+            rows = c.execute(
+                """
                 SELECT r.run_id, r.timestamp, r.tag,
                        res.mean_ms, res.throughput_mbps, res.stddev_ms, res.p95_ms
                 FROM results res
@@ -249,7 +269,9 @@ class HistoryDB:
                 WHERE res.suite = ? AND res.algorithm = ? AND res.name = ?
                 ORDER BY r.timestamp DESC, r.rowid DESC
                 LIMIT ?
-            """, (suite, algorithm, name, n)).fetchall()
+            """,
+                (suite, algorithm, name, n),
+            ).fetchall()
 
         return [
             TrendPoint(
@@ -268,19 +290,25 @@ class HistoryDB:
         """Liste les N derniers runs (métadonnées uniquement)."""
         c = self._conn.cursor()
         if tag:
-            rows = c.execute("""
+            rows = c.execute(
+                """
                 SELECT run_id, tag, timestamp, arch, cagoule_backend,
                        result_count, duration_s, summary_json
                 FROM runs WHERE tag = ?
                 ORDER BY timestamp DESC LIMIT ?
-            """, (tag, limit)).fetchall()
+            """,
+                (tag, limit),
+            ).fetchall()
         else:
-            rows = c.execute("""
+            rows = c.execute(
+                """
                 SELECT run_id, tag, timestamp, arch, cagoule_backend,
                        result_count, duration_s, summary_json
                 FROM runs
                 ORDER BY timestamp DESC LIMIT ?
-            """, (limit,)).fetchall()
+            """,
+                (limit,),
+            ).fetchall()
 
         return [
             {
@@ -299,13 +327,16 @@ class HistoryDB:
     def get_run_results(self, run_id: str) -> list[dict]:
         """Récupère tous les résultats d'un run spécifique."""
         c = self._conn.cursor()
-        rows = c.execute("""
+        rows = c.execute(
+            """
             SELECT suite, name, algorithm, data_size_bytes,
                    mean_ms, stddev_ms, p95_ms, p99_ms, cv_percent,
                    throughput_mbps, peak_mb, cpu_mean_pct, extra_json
             FROM results WHERE run_id = ?
             ORDER BY suite, name, algorithm
-        """, (run_id,)).fetchall()
+        """,
+            (run_id,),
+        ).fetchall()
 
         return [
             {

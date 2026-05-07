@@ -75,7 +75,9 @@ class BenchmarkResult:
     arch: str = field(default_factory=_detect_arch)
     has_aes_ni: bool = field(default_factory=_detect_aes_ni)
     python_version: str = field(default_factory=lambda: platform.python_version())
-    timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    timestamp: str = field(
+        default_factory=lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    )
     run_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     extra: dict = field(default_factory=dict)
 

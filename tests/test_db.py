@@ -2,20 +2,28 @@
 tests/test_db.py — Tests de la base SQLite d'historique v2.0.
 """
 
-
 import pytest
 
 from bench.db.history import HistoryDB
 from bench.suites.base import BenchmarkResult
 
 
-def _make_result(algo: str = "CAGOULE", suite: str = "encryption",
-                 name: str = "encrypt-1MB", tp: float = 25.0,
-                 mean_ms: float = 40.0) -> BenchmarkResult:
+def _make_result(
+    algo: str = "CAGOULE",
+    suite: str = "encryption",
+    name: str = "encrypt-1MB",
+    tp: float = 25.0,
+    mean_ms: float = 40.0,
+) -> BenchmarkResult:
     return BenchmarkResult(
-        suite=suite, name=name, algorithm=algo,
+        suite=suite,
+        name=name,
+        algorithm=algo,
         data_size_bytes=1_048_576,
-        mean_ms=mean_ms, stddev_ms=1.0, p95_ms=mean_ms * 1.1, p99_ms=mean_ms * 1.2,
+        mean_ms=mean_ms,
+        stddev_ms=1.0,
+        p95_ms=mean_ms * 1.1,
+        p99_ms=mean_ms * 1.2,
         throughput_mbps=tp,
         samples_ns=[int(mean_ms * 1e6)] * 10,
         extra={"matrix_backend": "avx2"},
@@ -112,7 +120,7 @@ class TestHistoryDBGetTrend:
         tmp_db.save_run([_make_result(tp=10.0)], tag="main")
         tmp_db.save_run([_make_result(tp=20.0)], tag="feature-branch")
         trend_main = tmp_db.get_trend("encryption", "CAGOULE", "encrypt-1MB", tag="main")
-        trend_fb   = tmp_db.get_trend("encryption", "CAGOULE", "encrypt-1MB", tag="feature-branch")
+        trend_fb = tmp_db.get_trend("encryption", "CAGOULE", "encrypt-1MB", tag="feature-branch")
         assert len(trend_main) == 1
         assert len(trend_fb) == 1
 
@@ -202,12 +210,12 @@ class TestHistoryDBDelete:
         r1 = _make_result(algo="CAGOULE", tp=25.0)
         r2 = _make_result(algo="AES-256-GCM", tp=35.0)
         run_id = tmp_db.save_run([r1, r2])
-        
+
         assert len(tmp_db.get_run_results(run_id)) == 2
-        
+
         tmp_db._conn.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
         tmp_db._conn.commit()
-        
+
         assert tmp_db.get_run_results(run_id) == []
 
 
@@ -218,7 +226,9 @@ class TestHistoryDBRegressionTag:
             tmp_db.save_run([_make_result(tp=30.0)], tag="main")
         for _ in range(5):
             tmp_db.save_run([_make_result(tp=10.0)], tag="experiment")
-        
+
         current = [_make_result(tp=29.0)]
-        passed, msgs = tmp_db.detect_regression(current, n_baseline=5, threshold_pct=-5.0, tag="main")
+        passed, msgs = tmp_db.detect_regression(
+            current, n_baseline=5, threshold_pct=-5.0, tag="main"
+        )
         assert passed is True

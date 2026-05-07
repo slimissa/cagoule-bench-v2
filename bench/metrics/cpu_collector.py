@@ -100,12 +100,12 @@ class CpuCollector:
         if _ctx_ok and ctx_before is not None:
             try:
                 ctx_after = self.proc.num_ctx_switches()
-                _ctx_vol   = ctx_after.voluntary   - ctx_before.voluntary
+                _ctx_vol = ctx_after.voluntary - ctx_before.voluntary
                 _ctx_invol = ctx_after.involuntary - ctx_before.involuntary
             except NotImplementedError:
                 _ctx_vol = _ctx_invol = -1
         else:
-            _ctx_vol = _ctx_invol = -1   # -1 = non disponible (kernel < 2.6.23)
+            _ctx_vol = _ctx_invol = -1  # -1 = non disponible (kernel < 2.6.23)
 
         result = CpuResult(
             cpu_samples=cpu_samples or [0.0],

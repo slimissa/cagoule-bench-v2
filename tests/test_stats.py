@@ -20,14 +20,15 @@ from bench.metrics.stats import (
 
 # ── Données de test ───────────────────────────────────────────────────────────
 
-FAST_SAMPLES = [1.0 + i * 0.01 for i in range(50)]         # ~1.25ms mean
-SLOW_SAMPLES = [3.0 + i * 0.01 for i in range(50)]         # ~3.25ms mean
-IDENTICAL_A  = [2.0 + i * 0.001 for i in range(50)]
-IDENTICAL_B  = [2.0 + i * 0.001 for i in range(50)]
-NOISY_SAMPLES = [10.0 + (i % 7) * 0.5 for i in range(50)] # variance élevée
+FAST_SAMPLES = [1.0 + i * 0.01 for i in range(50)]  # ~1.25ms mean
+SLOW_SAMPLES = [3.0 + i * 0.01 for i in range(50)]  # ~3.25ms mean
+IDENTICAL_A = [2.0 + i * 0.001 for i in range(50)]
+IDENTICAL_B = [2.0 + i * 0.001 for i in range(50)]
+NOISY_SAMPLES = [10.0 + (i % 7) * 0.5 for i in range(50)]  # variance élevée
 
 
 # ── Mann-Whitney U ────────────────────────────────────────────────────────────
+
 
 class TestMannWhitneyU:
     def test_clearly_different_populations(self):
@@ -50,7 +51,7 @@ class TestMannWhitneyU:
     def test_effect_label_large(self):
         """Populations très différentes → effet 'large'."""
         a = [10.0] * 50
-        b = [1.0]  * 50
+        b = [1.0] * 50
         result = mann_whitney_u(a, b)
         assert result.effect_label in ("medium", "large")
 
@@ -80,7 +81,7 @@ class TestMannWhitneyU:
         a = [1.0 + i * 0.05 for i in range(30)]
         b = [1.1 + i * 0.05 for i in range(30)]
         r_strict = mann_whitney_u(a, b, alpha=0.001)
-        r_loose  = mann_whitney_u(a, b, alpha=0.2)
+        r_loose = mann_whitney_u(a, b, alpha=0.2)
         # Loose devrait être plus facilement significatif
         if r_strict.p_value >= 0.001:
             assert r_strict.significant is False
@@ -91,6 +92,7 @@ class TestMannWhitneyU:
         result = mann_whitney_u(SLOW_SAMPLES, FAST_SAMPLES)
         d = result.to_dict()
         import json
+
         # Doit être JSON-sérialisable
         json.dumps(d)
         assert "u_statistic" in d
@@ -104,6 +106,7 @@ class TestMannWhitneyU:
 
 
 # ── Cohen's d ────────────────────────────────────────────────────────────────
+
 
 class TestCohensD:
     def test_sign_positive_when_a_greater(self):
@@ -120,11 +123,11 @@ class TestCohensD:
 
     def test_large_effect(self):
         a = [10.0] * 50
-        b = [1.0]  * 50
+        b = [1.0] * 50
         # Quand stddev≈0, éviter div/0 — la fonction doit retourner 0.0
         d = cohens_d(a, b)
         # Avec variance nulle, pooled_std = 0 → retourne 0.0
-        assert d == 0.0 or abs(d) > 1.0   # soit 0 (edge) soit large
+        assert d == 0.0 or abs(d) > 1.0  # soit 0 (edge) soit large
 
     def test_insufficient_data(self):
         d = cohens_d([1.0], [2.0])
@@ -132,6 +135,7 @@ class TestCohensD:
 
 
 # ── Bootstrap CI ─────────────────────────────────────────────────────────────
+
 
 class TestBootstrapCI:
     def test_contains_true_mean(self):
@@ -180,6 +184,7 @@ class TestBootstrapCI:
 
 # ── StatComparison + compare_algorithms ──────────────────────────────────────
 
+
 class TestCompareAlgorithms:
     def test_verdict_slower(self):
         cmp = compare_algorithms(SLOW_SAMPLES, FAST_SAMPLES, "CAGOULE", "AES")
@@ -201,6 +206,7 @@ class TestCompareAlgorithms:
 
     def test_to_dict_serializable(self):
         import json
+
         cmp = compare_algorithms(SLOW_SAMPLES, FAST_SAMPLES, "CAGOULE", "AES")
         d = cmp.to_dict()
         json.dumps(d)  # ne doit pas lever d'exception
@@ -228,11 +234,13 @@ class TestCompareAlgorithms:
 
 # ── Intégration avec BenchmarkResult ─────────────────────────────────────────
 
+
 class TestStatIntegrationWithResults:
     """Tests utilisant de vrais BenchmarkResult avec samples_ns."""
 
     def _make_result(self, samples_ms: list[float], algo: str = "TestAlgo"):
         from bench.suites.base import BenchmarkResult
+
         return BenchmarkResult(
             suite="test",
             name="test-bench",

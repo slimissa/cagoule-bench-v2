@@ -38,6 +38,7 @@ console = Console()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _resolve_suites(suites: tuple[str, ...], avx2: bool) -> list[str]:
     """Résout la liste des suites à lancer, avec injection auto de 'avx2'."""
     if suites:
@@ -59,6 +60,7 @@ def _load_json_results(path: str) -> list[dict]:
 
 # ── CLI entrypoint ─────────────────────────────────────────────────────────────
 
+
 @click.group()
 @click.version_option("2.0.0", prog_name="cagoule-bench")
 def main():
@@ -77,40 +79,91 @@ def main():
 
 # ── run ───────────────────────────────────────────────────────────────────────
 
+
 @main.command()
-@click.option("--suite", "-s", multiple=True,
-              type=click.Choice(list(ALL_SUITES.keys()), case_sensitive=False),
-              help="Suite(s) à lancer (répétable). Défaut : toutes sauf avx2.")
-@click.option("--avx2", is_flag=True, default=False,
-              help="Ajoute la suite avx2 (CAGOULE v2.2.0 requis).")
-@click.option("--avx2-only", is_flag=True, default=False,
-              help="Lance uniquement la suite avx2.")
-@click.option("--format", "-f", "formats", multiple=True,
-              type=click.Choice(["console", "json", "csv", "md", "html"], case_sensitive=False),
-              default=("console",), show_default=True,
-              help="Format(s) de sortie (répétable).")
-@click.option("--output", "-o", default="./benchmark_results",
-              show_default=True, help="Dossier de sortie pour les fichiers.")
-@click.option("--iterations", "-n", default=None, type=int,
-              help="Nombre d'itérations (écrase la config).")
-@click.option("--warmup", "-w", default=None, type=int,
-              help="Nombre de warmup (écrase la config).")
-@click.option("--size", multiple=True, type=int,
-              help="Tailles de données en bytes (ex: --size 1024 --size 1048576).")
-@click.option("--db", default=None,
-              help="Chemin vers la base SQLite d'historique.")
-@click.option("--tag", default="default", show_default=True,
-              help="Tag/branche pour l'historique (ex: main, pr-42).")
-@click.option("--baseline", default=None,
-              help="Fichier JSON baseline pour détecter les régressions.")
-@click.option("--threshold", default=-5.0, show_default=True, type=float,
-              help="Seuil de régression en % (ex: -5.0).")
-@click.option("--config", default=None, type=click.Path(exists=True),
-              help="Fichier cagoule_bench.toml explicite.")
-@click.option("--no-db-regression", is_flag=True, default=False,
-              help="Désactive la vérification de régression via l'historique DB.")
-def run(suite, avx2, avx2_only, formats, output, iterations, warmup, size,
-        db, tag, baseline, threshold, config, no_db_regression):
+@click.option(
+    "--suite",
+    "-s",
+    multiple=True,
+    type=click.Choice(list(ALL_SUITES.keys()), case_sensitive=False),
+    help="Suite(s) à lancer (répétable). Défaut : toutes sauf avx2.",
+)
+@click.option(
+    "--avx2", is_flag=True, default=False, help="Ajoute la suite avx2 (CAGOULE v2.2.0 requis)."
+)
+@click.option("--avx2-only", is_flag=True, default=False, help="Lance uniquement la suite avx2.")
+@click.option(
+    "--format",
+    "-f",
+    "formats",
+    multiple=True,
+    type=click.Choice(["console", "json", "csv", "md", "html"], case_sensitive=False),
+    default=("console",),
+    show_default=True,
+    help="Format(s) de sortie (répétable).",
+)
+@click.option(
+    "--output",
+    "-o",
+    default="./benchmark_results",
+    show_default=True,
+    help="Dossier de sortie pour les fichiers.",
+)
+@click.option(
+    "--iterations", "-n", default=None, type=int, help="Nombre d'itérations (écrase la config)."
+)
+@click.option("--warmup", "-w", default=None, type=int, help="Nombre de warmup (écrase la config).")
+@click.option(
+    "--size",
+    multiple=True,
+    type=int,
+    help="Tailles de données en bytes (ex: --size 1024 --size 1048576).",
+)
+@click.option("--db", default=None, help="Chemin vers la base SQLite d'historique.")
+@click.option(
+    "--tag",
+    default="default",
+    show_default=True,
+    help="Tag/branche pour l'historique (ex: main, pr-42).",
+)
+@click.option(
+    "--baseline", default=None, help="Fichier JSON baseline pour détecter les régressions."
+)
+@click.option(
+    "--threshold",
+    default=-5.0,
+    show_default=True,
+    type=float,
+    help="Seuil de régression en % (ex: -5.0).",
+)
+@click.option(
+    "--config",
+    default=None,
+    type=click.Path(exists=True),
+    help="Fichier cagoule_bench.toml explicite.",
+)
+@click.option(
+    "--no-db-regression",
+    is_flag=True,
+    default=False,
+    help="Désactive la vérification de régression via l'historique DB.",
+)
+def run(
+    suite,
+    avx2,
+    avx2_only,
+    formats,
+    output,
+    iterations,
+    warmup,
+    size,
+    db,
+    tag,
+    baseline,
+    threshold,
+    config,
+    no_db_regression,
+):
     """Lance les benchmarks et génère les rapports."""
 
     # Charger config fichier
@@ -120,11 +173,11 @@ def run(suite, avx2, avx2_only, formats, output, iterations, warmup, size,
 
     # Résolution des paramètres (CLI > config > defaults)
     final_iterations = iterations or cfg.iterations
-    final_warmup     = warmup     or cfg.warmup
-    final_sizes      = list(size) or cfg.sizes or None
-    final_db         = db         or cfg.db_path or None
-    final_formats    = list(formats) or cfg.formats
-    final_threshold  = threshold  or cfg.regression_threshold
+    final_warmup = warmup or cfg.warmup
+    final_sizes = list(size) or cfg.sizes or None
+    final_db = db or cfg.db_path or None
+    final_formats = list(formats) or cfg.formats
+    final_threshold = threshold or cfg.regression_threshold
 
     if avx2_only:
         suite_list = ["avx2"]
@@ -151,7 +204,9 @@ def run(suite, avx2, avx2_only, formats, output, iterations, warmup, size,
         # pour éviter que le run courant soit dans son propre baseline
         passed_db = True  # défaut si pas de DB
         if final_db and not no_db_regression:
-            passed_db, msgs_db = orch.check_regression_db(results, threshold_pct=final_threshold, tag=tag)
+            passed_db, msgs_db = orch.check_regression_db(
+                results, threshold_pct=final_threshold, tag=tag
+            )
             _print_regression_report(passed_db, msgs_db, f"historique DB (tag: {tag})")
 
         # Sauvegarde APRÈS la vérification (BUG3 FIX)
@@ -159,7 +214,9 @@ def run(suite, avx2, avx2_only, formats, output, iterations, warmup, size,
 
         # Vérification régression baseline JSON (fichier statique)
         if baseline:
-            passed, messages = orch.check_regression(results, baseline, threshold_pct=final_threshold)
+            passed, messages = orch.check_regression(
+                results, baseline, threshold_pct=final_threshold
+            )
             _print_regression_report(passed, messages, "baseline JSON")
 
         if not passed_db:
@@ -183,28 +240,30 @@ def _print_regression_report(passed: bool, messages: list[str], source: str) -> 
 
 # ── compare ───────────────────────────────────────────────────────────────────
 
+
 @main.command()
 @click.argument("baseline_file", type=click.Path(exists=True))
 @click.argument("current_file", type=click.Path(exists=True))
-@click.option("--threshold", default=-5.0, type=float, show_default=True,
-              help="Seuil de régression en %.")
-@click.option("--suite", "-s", default=None,
-              help="Filtrer par suite (ex: encryption).")
+@click.option(
+    "--threshold", default=-5.0, type=float, show_default=True, help="Seuil de régression en %."
+)
+@click.option("--suite", "-s", default=None, help="Filtrer par suite (ex: encryption).")
 def compare(baseline_file, current_file, threshold, suite):
     """Compare deux fichiers JSON de benchmarks."""
     baseline = _load_json_results(baseline_file)
-    current  = _load_json_results(current_file)
+    current = _load_json_results(current_file)
 
     if suite:
         baseline = [r for r in baseline if r.get("suite") == suite]
-        current  = [r for r in current  if r.get("suite") == suite]
+        current = [r for r in current if r.get("suite") == suite]
 
     b_by_key = {f"{r['suite']}/{r['name']}/{r['algorithm']}": r for r in baseline}
     c_by_key = {f"{r['suite']}/{r['name']}/{r['algorithm']}": r for r in current}
 
     t = Table(
         title="Comparaison baseline → current",
-        box=box.ROUNDED, border_style="blue",
+        box=box.ROUNDED,
+        border_style="blue",
         header_style="bold blue on black",
     )
     t.add_column("Benchmark", style="white", min_width=32)
@@ -221,7 +280,9 @@ def compare(baseline_file, current_file, threshold, suite):
         b = b_by_key.get(key)
         c = c_by_key.get(key)
         if not b or not c:
-            t.add_row(key, "[dim]—[/dim]", "[dim]—[/dim]", "[dim]N/A[/dim]", "[dim]NEW/REMOVED[/dim]")
+            t.add_row(
+                key, "[dim]—[/dim]", "[dim]—[/dim]", "[dim]N/A[/dim]", "[dim]NEW/REMOVED[/dim]"
+            )
             continue
 
         b_tp = b.get("throughput_mbps", 0)
@@ -257,6 +318,7 @@ def compare(baseline_file, current_file, threshold, suite):
 
 # ── history ───────────────────────────────────────────────────────────────────
 
+
 @main.command()
 @click.option("--db", default=".cagoule_bench/history.db", show_default=True)
 @click.option("--limit", "-n", default=10, show_default=True, type=int)
@@ -277,8 +339,12 @@ def history(db, limit, tag, detail):
             if not runs:
                 console.print(f"[red]run_id {detail!r} introuvable.[/red]")
                 return
-            t = Table(title=f"Résultats run {detail[:8]}...", box=box.ROUNDED, border_style="blue",
-                      header_style="bold blue on black")
+            t = Table(
+                title=f"Résultats run {detail[:8]}...",
+                box=box.ROUNDED,
+                border_style="blue",
+                header_style="bold blue on black",
+            )
             t.add_column("Suite")
             t.add_column("Name")
             t.add_column("Algorithm")
@@ -287,7 +353,9 @@ def history(db, limit, tag, detail):
             t.add_column("p95 (ms)", justify="right")
             for r in runs:
                 t.add_row(
-                    r["suite"], r["name"], r["algorithm"],
+                    r["suite"],
+                    r["name"],
+                    r["algorithm"],
                     f"{r['throughput_mbps']:.1f} MB/s",
                     f"{r['mean_ms']:.3f}",
                     f"{r['p95_ms']:.3f}",
@@ -302,7 +370,8 @@ def history(db, limit, tag, detail):
 
         t = Table(
             title=f"Historique — {len(runs)} runs (DB: {db})",
-            box=box.ROUNDED, border_style="blue",
+            box=box.ROUNDED,
+            border_style="blue",
             header_style="bold blue on black",
         )
         t.add_column("run_id", style="dim", min_width=10)
@@ -330,10 +399,13 @@ def history(db, limit, tag, detail):
                 tp_str,
             )
         console.print(t)
-        console.print("\n[dim]Pour voir le détail d'un run : cagoule-bench history --detail <run_id>[/dim]")
+        console.print(
+            "\n[dim]Pour voir le détail d'un run : cagoule-bench history --detail <run_id>[/dim]"
+        )
 
 
 # ── compare-history ───────────────────────────────────────────────────────────
+
 
 @main.command("compare-history")
 @click.option("--db", default=".cagoule_bench/history.db", show_default=True)
@@ -361,7 +433,8 @@ def compare_history(db, suite, algo, name, n_runs, tag):
 
         t = Table(
             title=f"Tendance : {suite}/{algo}/{name} (N={len(trend)})",
-            box=box.ROUNDED, border_style="blue",
+            box=box.ROUNDED,
+            border_style="blue",
             header_style="bold blue on black",
         )
         t.add_column("#", justify="right", style="dim")
@@ -386,7 +459,11 @@ def compare_history(db, suite, algo, name, n_runs, tag):
             )
         console.print(t)
 
-        drift_c = "green" if drift["trend"] == "improving" else ("yellow" if drift["trend"] == "stable" else "red")
+        drift_c = (
+            "green"
+            if drift["trend"] == "improving"
+            else ("yellow" if drift["trend"] == "stable" else "red")
+        )
         console.print(
             f"\n  Drift : [{drift_c}]{drift['trend']}[/{drift_c}]  "
             f"slope={drift['slope_mbps_per_run']:+.3f} MB/s·run⁻¹  "
@@ -397,12 +474,14 @@ def compare_history(db, suite, algo, name, n_runs, tag):
 
 # ── profile ───────────────────────────────────────────────────────────────────
 
+
 @main.command()
 @click.argument("suite_name", type=click.Choice(list(ALL_SUITES.keys())))
 @click.option("--iterations", "-n", default=1000, show_default=True)
 @click.option("--warmup", "-w", default=20, show_default=True)
-@click.option("--size", default=1_048_576, show_default=True, type=int,
-              help="Taille du message en bytes.")
+@click.option(
+    "--size", default=1_048_576, show_default=True, type=int, help="Taille du message en bytes."
+)
 def profile(suite_name, iterations, warmup, size):
     """Lance une suite unique en mode profiling haute précision."""
     console.print(f"\n[bold cyan]PROFILE MODE — {suite_name.upper()}[/bold cyan]")
@@ -421,12 +500,14 @@ def profile(suite_name, iterations, warmup, size):
     duration = time.perf_counter() - t_start
 
     from bench.reporters import ConsoleReporter
+
     ConsoleReporter().report(results, suite_name=suite_name)
 
     console.print(f"\n  [dim]Durée profiling : {duration:.2f}s — {len(results)} benchmarks[/dim]")
 
 
 # ── info ──────────────────────────────────────────────────────────────────────
+
 
 @main.command()
 def info():
@@ -453,13 +534,13 @@ def info():
         with open("/proc/cpuinfo", encoding="utf-8", errors="replace") as f:
             cpuinfo = f.read()
         has_aes_ni = "aes" in cpuinfo
-        has_avx2   = "avx2" in cpuinfo
+        has_avx2 = "avx2" in cpuinfo
     except Exception:
         has_aes_ni = False
         has_avx2 = False
 
-    t_sys.add_row("AES-NI",  "[green]✓[/green]" if has_aes_ni else "[yellow]✗[/yellow]")
-    t_sys.add_row("AVX2",    "[green]✓[/green]" if has_avx2 else "[yellow]✗[/yellow]")
+    t_sys.add_row("AES-NI", "[green]✓[/green]" if has_aes_ni else "[yellow]✗[/yellow]")
+    t_sys.add_row("AVX2", "[green]✓[/green]" if has_avx2 else "[yellow]✗[/yellow]")
     console.print("\n[bold]Système[/bold]")
     console.print(t_sys)
 
@@ -471,11 +552,18 @@ def info():
 
     backend = _CAGOULE_BACKEND
     matrix_be = backend.get("matrix_backend", "N/A")
-    omega_be  = backend.get("omega_backend",  "N/A")
+    omega_be = backend.get("omega_backend", "N/A")
     be_c = "green" if matrix_be == "avx2" else "yellow"
     t_cag.add_row("matrix_backend", f"[{be_c}]{matrix_be}[/{be_c}]")
-    t_cag.add_row("omega_backend",  f"[cyan]{omega_be}[/cyan]")
-    t_cag.add_row("CGL1 format",   "[green]inchangé (v2.2.0 rétrocompat)[/green]" if CAGOULE_VERSION != "not-installed" else "[dim]N/A[/dim]")
+    t_cag.add_row("omega_backend", f"[cyan]{omega_be}[/cyan]")
+    t_cag.add_row(
+        "CGL1 format",
+        (
+            "[green]inchangé (v2.2.0 rétrocompat)[/green]"
+            if CAGOULE_VERSION != "not-installed"
+            else "[dim]N/A[/dim]"
+        ),
+    )
 
     console.print("\n[bold]CAGOULE[/bold]")
     console.print(t_cag)
@@ -487,7 +575,7 @@ def info():
     # BUG8 FIX: argon2-cffi s'importe comme "argon2", pas "argon2_cffi"
     IMPORT_MAP = {
         "cryptography": "cryptography",
-        "argon2-cffi": "argon2",       # package PyPI argon2-cffi → import argon2
+        "argon2-cffi": "argon2",  # package PyPI argon2-cffi → import argon2
         "psutil": "psutil",
         "rich": "rich",
         "click": "click",
@@ -506,12 +594,14 @@ def info():
 
 # ── list-suites ───────────────────────────────────────────────────────────────
 
+
 @main.command("list-suites")
 def list_suites():
     """Liste toutes les suites disponibles."""
     t = Table(
         title="Suites disponibles — cagoule-bench v2.0.0",
-        box=box.ROUNDED, border_style="blue",
+        box=box.ROUNDED,
+        border_style="blue",
         header_style="bold blue on black",
     )
     t.add_column("Suite", style="cyan bold", min_width=14)

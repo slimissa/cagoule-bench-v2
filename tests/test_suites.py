@@ -13,6 +13,7 @@ from bench.suites.base import BenchmarkResult
 
 # ── BaseSuite + BenchmarkResult ───────────────────────────────────────────────
 
+
 class TestBenchmarkResult:
     def test_to_dict_has_required_keys(self):
         r = BenchmarkResult(suite="test", name="bench", algorithm="Algo")
@@ -25,8 +26,9 @@ class TestBenchmarkResult:
         assert "meta" in d
 
     def test_samples_ms_conversion(self):
-        r = BenchmarkResult(suite="test", name="bench", algorithm="A",
-                            samples_ns=[1_000_000, 2_000_000, 3_000_000])
+        r = BenchmarkResult(
+            suite="test", name="bench", algorithm="A", samples_ns=[1_000_000, 2_000_000, 3_000_000]
+        )
         ms = r.samples_ms()
         assert ms == pytest.approx([1.0, 2.0, 3.0])
 
@@ -42,6 +44,7 @@ class TestBenchmarkResult:
 
     def test_run_id_is_uuid(self):
         import uuid
+
         r = BenchmarkResult(suite="test", name="b", algorithm="A")
         uuid.UUID(r.run_id)  # ne doit pas lever
 
@@ -52,9 +55,14 @@ class TestBenchmarkResult:
 
     def test_to_dict_serializable(self):
         import json
+
         r = BenchmarkResult(
-            suite="test", name="bench", algorithm="Algo",
-            mean_ms=10.0, throughput_mbps=5.0, peak_mb=0.5,
+            suite="test",
+            name="bench",
+            algorithm="Algo",
+            mean_ms=10.0,
+            throughput_mbps=5.0,
+            peak_mb=0.5,
             extra={"key": "value"},
         )
         json.dumps(r.to_dict())  # ne doit pas lever
@@ -82,12 +90,15 @@ class TestAllSuitesRegistered:
 
 # ── EncryptionSuite ──────────────────────────────────────────────────────────
 
+
 class TestEncryptionSuite:
     @pytest.fixture
     def suite(self):
         from bench.suites.encryption_suite import EncryptionSuite
+
         return EncryptionSuite(
-            iterations=2, warmup=1,
+            iterations=2,
+            warmup=1,
             sizes=[1_024, 8_192],  # Petites tailles pour rapidité
         )
 
@@ -143,13 +154,16 @@ class TestEncryptionSuite:
 
 # ── KdfSuite ─────────────────────────────────────────────────────────────────
 
+
 class TestKdfSuite:
     @pytest.fixture
     def suite(self):
         from bench.suites.kdf_suite import KdfSuite
+
         # Grille minimale pour rapidité
         return KdfSuite(
-            iterations=2, warmup=1,
+            iterations=2,
+            warmup=1,
             time_costs=[1],
             memory_costs=[16_384],
             parallelism=[1],
@@ -204,10 +218,12 @@ class TestKdfSuite:
 
 # ── MemorySuite ───────────────────────────────────────────────────────────────
 
+
 class TestMemorySuite:
     @pytest.fixture
     def suite(self):
         from bench.suites.memory_suite import MemorySuite
+
         return MemorySuite(iterations=2, warmup=1, vault_sizes=[10, 50])
 
     def test_returns_results(self, suite):
@@ -241,6 +257,7 @@ class TestMemorySuite:
 
 # ── StreamingSuite ────────────────────────────────────────────────────────────
 
+
 @pytest.mark.slow
 class TestStreamingSuite:
     """Suite de streaming — marked slow, skipped par défaut."""
@@ -248,8 +265,10 @@ class TestStreamingSuite:
     @pytest.fixture
     def suite(self):
         from bench.suites.streaming_suite import StreamingSuite
+
         return StreamingSuite(
-            iterations=1, warmup=0,
+            iterations=1,
+            warmup=0,
             sizes=[1_048_576],  # 1MB uniquement
         )
 
@@ -270,12 +289,15 @@ class TestStreamingSuite:
 
 # ── AVX2Suite ─────────────────────────────────────────────────────────────────
 
+
 class TestAVX2Suite:
     @pytest.fixture
     def suite(self):
         from bench.suites.avx2_suite import AVX2Suite
+
         return AVX2Suite(
-            iterations=2, warmup=1,
+            iterations=2,
+            warmup=1,
             sizes=[65_536],  # 64KB
         )
 
@@ -300,22 +322,25 @@ class TestAVX2Suite:
 
 # ── Orchestrator (sans crypto réel) ──────────────────────────────────────────
 
+
 class TestOrchestrator:
     def test_unknown_suite_raises(self):
         from bench.orchestrator import BenchmarkError, Orchestrator
+
         with pytest.raises(BenchmarkError, match="inconnues"):
             Orchestrator(suites=["nonexistent_suite"])
 
     def test_valid_suite_instantiation(self):
         from bench.orchestrator import Orchestrator
+
         orch = Orchestrator(suites=["encryption"], iterations=2, warmup=1)
         assert orch.suite_names == ["encryption"]
 
     def test_regression_check_no_baseline(self, tmp_path):
         from bench.orchestrator import Orchestrator
+
         orch = Orchestrator(suites=["encryption"], iterations=2, warmup=1)
-        r = BenchmarkResult(suite="encryption", name="test", algorithm="A",
-                            throughput_mbps=25.0)
+        r = BenchmarkResult(suite="encryption", name="test", algorithm="A", throughput_mbps=25.0)
         passed, msgs = orch.check_regression([r], baseline_path=tmp_path / "nonexistent.json")
         assert passed is True
 
@@ -323,24 +348,45 @@ class TestOrchestrator:
         import json
 
         from bench.orchestrator import Orchestrator
+
         # BUG4 FIX: tester les deux formats JSON (liste plate ET dict)
         for fmt_name, baseline in [
-            ("dict_format", {"results": [{
-                "suite": "encryption", "name": "encrypt-1MB",
-                "algorithm": "CAGOULE", "throughput_mbps": 30.0,
-            }]}),
-            ("list_format", [{
-                "suite": "encryption", "name": "encrypt-1MB",
-                "algorithm": "CAGOULE", "throughput_mbps": 30.0,
-            }]),
+            (
+                "dict_format",
+                {
+                    "results": [
+                        {
+                            "suite": "encryption",
+                            "name": "encrypt-1MB",
+                            "algorithm": "CAGOULE",
+                            "throughput_mbps": 30.0,
+                        }
+                    ]
+                },
+            ),
+            (
+                "list_format",
+                [
+                    {
+                        "suite": "encryption",
+                        "name": "encrypt-1MB",
+                        "algorithm": "CAGOULE",
+                        "throughput_mbps": 30.0,
+                    }
+                ],
+            ),
         ]:
             path = tmp_path / f"baseline_{fmt_name}.json"
             path.write_text(json.dumps(baseline))
             orch = Orchestrator(suites=["encryption"], iterations=2, warmup=1)
-            current = [BenchmarkResult(
-                suite="encryption", name="encrypt-1MB", algorithm="CAGOULE",
-                throughput_mbps=10.0,
-            )]
+            current = [
+                BenchmarkResult(
+                    suite="encryption",
+                    name="encrypt-1MB",
+                    algorithm="CAGOULE",
+                    throughput_mbps=10.0,
+                )
+            ]
             passed, msgs = orch.check_regression(current, baseline_path=path)
             assert passed is False, f"Format {fmt_name}: régression non détectée"
             assert len(msgs) > 0
@@ -348,7 +394,9 @@ class TestOrchestrator:
     def test_save_history_separated_from_run(self, tmp_path):
         """BUG3 FIX: save_history est séparé de run() pour ne pas contaminer le baseline."""
         from bench.orchestrator import Orchestrator
-        orch = Orchestrator(suites=["encryption"], iterations=2, warmup=1,
-                            db_path=tmp_path / ".bench" / "hist.db")
+
+        orch = Orchestrator(
+            suites=["encryption"], iterations=2, warmup=1, db_path=tmp_path / ".bench" / "hist.db"
+        )
         # save_history doit exister comme méthode séparée
         assert hasattr(orch, "save_history"), "save_history() manquant"

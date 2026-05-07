@@ -50,25 +50,27 @@ class ConsoleReporter:
 
         # ── Header ────────────────────────────────────────────────────
         console.print()
-        console.print(Panel(
-            Text.assemble(
-                ("cagoule-bench ", "bold cyan"),
-                ("v2.0.0", "bold white"),
-                ("  |  ", "dim"),
-                (platform.machine(), "yellow"),
-                ("  |  ", "dim"),
-                (platform.python_version(), "yellow"),
-                ("  |  ", "dim"),
-                ("matrix: ", "dim"),
-                (matrix_backend, backend_color + " bold"),
-                ("  omega: ", "dim"),
-                (omega_backend, "cyan"),
-                ("  |  ", "dim"),
-                (time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()), "dim"),
-            ),
-            title="[bold blue]CAGOULE-BENCH v2.0.0[/bold blue]",
-            border_style="blue",
-        ))
+        console.print(
+            Panel(
+                Text.assemble(
+                    ("cagoule-bench ", "bold cyan"),
+                    ("v2.0.0", "bold white"),
+                    ("  |  ", "dim"),
+                    (platform.machine(), "yellow"),
+                    ("  |  ", "dim"),
+                    (platform.python_version(), "yellow"),
+                    ("  |  ", "dim"),
+                    ("matrix: ", "dim"),
+                    (matrix_backend, backend_color + " bold"),
+                    ("  omega: ", "dim"),
+                    (omega_backend, "cyan"),
+                    ("  |  ", "dim"),
+                    (time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()), "dim"),
+                ),
+                title="[bold blue]CAGOULE-BENCH v2.0.0[/bold blue]",
+                border_style="blue",
+            )
+        )
 
         if not results:
             console.print("[yellow]Aucun résultat à afficher.[/yellow]")
@@ -280,7 +282,9 @@ class ConsoleReporter:
                 f"{r.cpu_mean_pct:.1f}%",
             )
         console.print(t)
-        console.print("[dim]ProcessPoolExecutor — GIL non-impactant pour chiffrement CPU-bound[/dim]")
+        console.print(
+            "[dim]ProcessPoolExecutor — GIL non-impactant pour chiffrement CPU-bound[/dim]"
+        )
 
     # ── Streaming (v2.0 new) ──────────────────────────────────────────────────
 
@@ -305,12 +309,14 @@ class ConsoleReporter:
                 f"[{ram_c}]{ram_eff}[/{ram_c}]",
             )
         console.print(t)
-        console.print("[dim]Streaming: lecture chunked → chiffrement → sortie — RAM = O(chunk) idéalement[/dim]")
+        console.print(
+            "[dim]Streaming: lecture chunked → chiffrement → sortie — RAM = O(chunk) idéalement[/dim]"
+        )
 
     # ── AVX2 delta (v2.0 new) ────────────────────────────────────────────────
 
     def _render_avx2(self, results: list[BenchmarkResult]) -> None:
-        avx2_results  = [r for r in results if r.algorithm == "CAGOULE-AVX2"]
+        avx2_results = [r for r in results if r.algorithm == "CAGOULE-AVX2"]
         scalar_results = [r for r in results if r.algorithm == "CAGOULE-Scalar"]
 
         if not avx2_results:
@@ -344,7 +350,10 @@ class ConsoleReporter:
             if not r_sc:
                 continue
             speedup = r_sc.mean_ms / r_avx2.mean_ms if r_avx2.mean_ms > 0 else 1.0
-            gain_pct = r_sc.extra.get("avx2_gain_pct", (r_sc.mean_ms - r_avx2.mean_ms) / r_sc.mean_ms * 100 if r_sc.mean_ms > 0 else 0)
+            gain_pct = r_sc.extra.get(
+                "avx2_gain_pct",
+                (r_sc.mean_ms - r_avx2.mean_ms) / r_sc.mean_ms * 100 if r_sc.mean_ms > 0 else 0,
+            )
             gain_c = "green" if gain_pct > 10 else ("yellow" if gain_pct > 0 else "dim")
             t.add_row(
                 r_avx2.name.replace("encrypt-", ""),
@@ -358,17 +367,18 @@ class ConsoleReporter:
         console.print(t)
 
         if avx2_results:
-            avg_gain = sum(
-                r_sc.extra.get("avx2_gain_pct", 0)
-                for r_sc in scalar_results
-            ) / max(len(scalar_results), 1)
+            avg_gain = sum(r_sc.extra.get("avx2_gain_pct", 0) for r_sc in scalar_results) / max(
+                len(scalar_results), 1
+            )
             target = 25.0  # v2.2.0 cible ≥25%
             status_c = "green" if avg_gain >= target else ("yellow" if avg_gain >= 10 else "red")
             console.print(
                 f"\n  [bold]Gain moyen AVX2 :[/bold] [{status_c}]{avg_gain:.1f}%[/{status_c}]  "
                 f"[dim](objectif roadmap v2.2.0 : ≥ +25%)[/dim]"
             )
-        console.print("[dim]Note: CAGOULE_FORCE_SCALAR=1 utilisé pour mesurer le chemin scalaire[/dim]")
+        console.print(
+            "[dim]Note: CAGOULE_FORCE_SCALAR=1 utilisé pour mesurer le chemin scalaire[/dim]"
+        )
 
     # ── Generic ───────────────────────────────────────────────────────────────
 

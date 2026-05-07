@@ -31,27 +31,31 @@ cagoule_backend_info: dict = {}
 try:
     from cagoule import backend_info as _cag_backend
     from cagoule import encrypt as cagoule_encrypt
+
     cagoule_backend_info = _cag_backend
     CAGOULE_V22 = True
     CAGOULE_AVAILABLE = True
 except ImportError:
+
     def cagoule_encrypt(plaintext: bytes, password: bytes, **kwargs) -> bytes:  # type: ignore[misc]
         key = password * (len(plaintext) // len(password) + 1)
-        return bytes(p ^ k for p, k in zip(plaintext, key[:len(plaintext)]))
+        return bytes(p ^ k for p, k in zip(plaintext, key[: len(plaintext)]))
+
 
 try:
     from cagoule.params import CagouleParams
+
     CAGOULE_PARAMS = True
 except ImportError:
     pass
 
-BENCHMARK_SALT = b'\xca\xf0' * 16
+BENCHMARK_SALT = b"\xca\xf0" * 16
 PASSWORD = b"cagoule-bench-v2-avx2-test"
 
 DELTA_SIZES = [
-    65_536,        # 64 KB
-    1_048_576,     # 1 MB
-    10_485_760,    # 10 MB
+    65_536,  # 64 KB
+    1_048_576,  # 1 MB
+    10_485_760,  # 10 MB
 ]
 
 # ── Subprocess worker script ──────────────────────────────────────────────────
@@ -136,18 +140,22 @@ def _run_scalar_subprocess(size: int, iterations: int, warmup: int, salt: bytes)
       - BUG2 : L'env du processus parent n'est JAMAIS modifié,
                même en cas d'exception dans le subprocess.
     """
-    payload = json.dumps({
-        "size": size,
-        "iterations": iterations,
-        "warmup": warmup,
-        "password": PASSWORD.decode(),
-        "salt": list(salt),
-    })
+    payload = json.dumps(
+        {
+            "size": size,
+            "iterations": iterations,
+            "warmup": warmup,
+            "password": PASSWORD.decode(),
+            "salt": list(salt),
+        }
+    )
     child_env = {**os.environ, "CAGOULE_FORCE_SCALAR": "1"}
     try:
         proc = subprocess.run(
             [sys.executable, "-c", _SCALAR_WORKER_SCRIPT, payload],
-            capture_output=True, text=True, timeout=300,
+            capture_output=True,
+            text=True,
+            timeout=300,
             env=child_env,
         )
         if proc.returncode != 0:
@@ -160,6 +168,7 @@ def _run_scalar_subprocess(size: int, iterations: int, warmup: int, salt: bytes)
 
 
 # ── Suite ─────────────────────────────────────────────────────────────────────
+
 
 class AVX2Suite(BaseSuite):
     NAME = "avx2"
@@ -181,10 +190,16 @@ class AVX2Suite(BaseSuite):
 
     def run(self) -> list[BenchmarkResult]:
         if not CAGOULE_V22:
-            return [self._make_result(
-                name="avx2-unavailable", algorithm="CAGOULE",
-                extra={"error": "CAGOULE v2.2.0 non disponible", "tip": "pip install cagoule>=2.2.0"},
-            )]
+            return [
+                self._make_result(
+                    name="avx2-unavailable",
+                    algorithm="CAGOULE",
+                    extra={
+                        "error": "CAGOULE v2.2.0 non disponible",
+                        "tip": "pip install cagoule>=2.2.0",
+                    },
+                )
+            ]
 
         backend = cagoule_backend_info
         is_avx2_active = backend.get("matrix_backend") == "avx2"
@@ -195,83 +210,120 @@ class AVX2Suite(BaseSuite):
             size_label = self._fmt_size(size)
 
             if self._params is not None:
-                def _op_avx2(pt=plaintext): return cagoule_encrypt(pt, PASSWORD, params=self._params)
+
+                def _op_avx2(pt=plaintext):
+                    return cagoule_encrypt(pt, PASSWORD, params=self._params)
+
             else:
-                def _op_avx2(pt=plaintext): return cagoule_encrypt(pt, PASSWORD)
+
+                def _op_avx2(pt=plaintext):
+                    return cagoule_encrypt(pt, PASSWORD)
 
             # ── 1. AVX2 (dispatch normal, in-process) ─────────────────
             timing_avx2 = self._timer.measure(
-                _op_avx2, iterations=self.iterations, warmup=self.warmup,
+                _op_avx2,
+                iterations=self.iterations,
+                warmup=self.warmup,
                 label=f"avx2-{size_label}",
             )
             _, mem_avx2 = self._mem.measure(_op_avx2)
 
-            results.append(self._make_result(
-                name=f"encrypt-{size_label}", algorithm="CAGOULE-AVX2",
-                data_size_bytes=size,
-                mean_ms=timing_avx2.mean_ms, stddev_ms=timing_avx2.stddev_ms,
-                min_ms=timing_avx2.min_ms, max_ms=timing_avx2.max_ms,
-                p95_ms=timing_avx2.p95_ms, p99_ms=timing_avx2.p99_ms,
-                cv_percent=timing_avx2.cv_percent,
-                throughput_mbps=timing_avx2.throughput_mbps(size),
-                peak_mb=mem_avx2.peak_mb, delta_mb=mem_avx2.delta_mb,
-                samples_ns=timing_avx2.samples_ns,
-                extra={
-                    "backend": "avx2" if is_avx2_active else "scalar_runtime",
-                    "avx2_available": is_avx2_active,
-                    "matrix_backend": backend.get("matrix_backend"),
-                    "omega_backend": backend.get("omega_backend"),
-                    "forced_scalar": False, "size_label": size_label,
-                    "measurement_method": "in_process",
-                },
-            ))
+            results.append(
+                self._make_result(
+                    name=f"encrypt-{size_label}",
+                    algorithm="CAGOULE-AVX2",
+                    data_size_bytes=size,
+                    mean_ms=timing_avx2.mean_ms,
+                    stddev_ms=timing_avx2.stddev_ms,
+                    min_ms=timing_avx2.min_ms,
+                    max_ms=timing_avx2.max_ms,
+                    p95_ms=timing_avx2.p95_ms,
+                    p99_ms=timing_avx2.p99_ms,
+                    cv_percent=timing_avx2.cv_percent,
+                    throughput_mbps=timing_avx2.throughput_mbps(size),
+                    peak_mb=mem_avx2.peak_mb,
+                    delta_mb=mem_avx2.delta_mb,
+                    samples_ns=timing_avx2.samples_ns,
+                    extra={
+                        "backend": "avx2" if is_avx2_active else "scalar_runtime",
+                        "avx2_available": is_avx2_active,
+                        "matrix_backend": backend.get("matrix_backend"),
+                        "omega_backend": backend.get("omega_backend"),
+                        "forced_scalar": False,
+                        "size_label": size_label,
+                        "measurement_method": "in_process",
+                    },
+                )
+            )
 
             # ── 2. Scalaire (subprocess isolé) ────────────────────────
             scalar = _run_scalar_subprocess(
-                size=size, iterations=self.iterations,
-                warmup=self.warmup, salt=BENCHMARK_SALT,
+                size=size,
+                iterations=self.iterations,
+                warmup=self.warmup,
+                salt=BENCHMARK_SALT,
             )
 
             if scalar.get("skipped"):
-                results.append(self._make_result(
-                    name=f"encrypt-{size_label}", algorithm="CAGOULE-Scalar",
-                    data_size_bytes=size,
-                    extra={"backend": "scalar_subprocess_failed",
-                           "error": scalar.get("error", "unknown"),
-                           "forced_scalar": True, "avx2_gain_pct": None},
-                ))
+                results.append(
+                    self._make_result(
+                        name=f"encrypt-{size_label}",
+                        algorithm="CAGOULE-Scalar",
+                        data_size_bytes=size,
+                        extra={
+                            "backend": "scalar_subprocess_failed",
+                            "error": scalar.get("error", "unknown"),
+                            "forced_scalar": True,
+                            "avx2_gain_pct": None,
+                        },
+                    )
+                )
                 continue
 
-            avx2_gain_pct = round(
-                (scalar["mean_ms"] - timing_avx2.mean_ms) / scalar["mean_ms"] * 100, 1
-            ) if scalar["mean_ms"] > 0 else 0.0
+            avx2_gain_pct = (
+                round((scalar["mean_ms"] - timing_avx2.mean_ms) / scalar["mean_ms"] * 100, 1)
+                if scalar["mean_ms"] > 0
+                else 0.0
+            )
 
-            results.append(self._make_result(
-                name=f"encrypt-{size_label}", algorithm="CAGOULE-Scalar",
-                data_size_bytes=size,
-                mean_ms=scalar["mean_ms"], stddev_ms=scalar["stddev_ms"],
-                min_ms=scalar["min_ms"], max_ms=scalar["max_ms"],
-                p95_ms=scalar["p95_ms"], p99_ms=scalar["p99_ms"],
-                cv_percent=scalar["cv_percent"],
-                throughput_mbps=scalar["throughput_mbps"],
-                samples_ns=scalar.get("samples_ns", []),
-                extra={
-                    "backend": scalar.get("backend", "scalar_forced_subprocess"),
-                    "avx2_available": is_avx2_active,
-                    "matrix_backend": "scalar", "omega_backend": backend.get("omega_backend"),
-                    "forced_scalar": True, "size_label": size_label,
-                    "measurement_method": "subprocess_isolated",
-                    "avx2_speedup": round(
-                        scalar["mean_ms"] / timing_avx2.mean_ms, 3
-                    ) if timing_avx2.mean_ms > 0 else 1.0,
-                    "avx2_gain_pct": avx2_gain_pct,
-                },
-            ))
+            results.append(
+                self._make_result(
+                    name=f"encrypt-{size_label}",
+                    algorithm="CAGOULE-Scalar",
+                    data_size_bytes=size,
+                    mean_ms=scalar["mean_ms"],
+                    stddev_ms=scalar["stddev_ms"],
+                    min_ms=scalar["min_ms"],
+                    max_ms=scalar["max_ms"],
+                    p95_ms=scalar["p95_ms"],
+                    p99_ms=scalar["p99_ms"],
+                    cv_percent=scalar["cv_percent"],
+                    throughput_mbps=scalar["throughput_mbps"],
+                    samples_ns=scalar.get("samples_ns", []),
+                    extra={
+                        "backend": scalar.get("backend", "scalar_forced_subprocess"),
+                        "avx2_available": is_avx2_active,
+                        "matrix_backend": "scalar",
+                        "omega_backend": backend.get("omega_backend"),
+                        "forced_scalar": True,
+                        "size_label": size_label,
+                        "measurement_method": "subprocess_isolated",
+                        "avx2_speedup": (
+                            round(scalar["mean_ms"] / timing_avx2.mean_ms, 3)
+                            if timing_avx2.mean_ms > 0
+                            else 1.0
+                        ),
+                        "avx2_gain_pct": avx2_gain_pct,
+                    },
+                )
+            )
 
         return results
 
     @staticmethod
     def _fmt_size(size: int) -> str:
-        if size < 1024:       return f"{size}B"
-        if size < 1_048_576:  return f"{size // 1024}KB"
+        if size < 1024:
+            return f"{size}B"
+        if size < 1_048_576:
+            return f"{size // 1024}KB"
         return f"{size // 1_048_576}MB"

@@ -39,6 +39,7 @@ REGRESSION_THRESHOLD_PCT = -5.0
 # Tenter de récupérer la version CAGOULE
 try:
     import cagoule as _cag
+
     CAGOULE_VERSION = getattr(_cag, "__version__", "unknown")
     try:
         from cagoule import backend_info as _CAGOULE_BACKEND
@@ -168,7 +169,9 @@ class Orchestrator:
 
         self._duration_s = time.perf_counter() - t_start
         console.print()
-        console.rule(f"[green]Terminé en {self._duration_s:.1f}s — {len(all_results)} résultats[/green]")
+        console.rule(
+            f"[green]Terminé en {self._duration_s:.1f}s — {len(all_results)} résultats[/green]"
+        )
         console.print()
 
         # BUG3 FIX: NE PAS sauvegarder ici.
@@ -196,7 +199,9 @@ class Orchestrator:
                     duration_s=self._duration_s,
                     cagoule_version=CAGOULE_VERSION,
                 )
-            console.print(f"  [dim]→ Historique : run_id={self._run_id[:8]}... sauvegardé dans {self.db_path}[/dim]")
+            console.print(
+                f"  [dim]→ Historique : run_id={self._run_id[:8]}... sauvegardé dans {self.db_path}[/dim]"
+            )
             return self._run_id
         except Exception as e:
             console.print(f"  [yellow]⚠ Historique non sauvegardé : {e}[/yellow]")
@@ -268,8 +273,7 @@ class Orchestrator:
             baseline_results = raw.get("results", [])
 
         baseline_by_key = {
-            f"{r['suite']}/{r['name']}/{r['algorithm']}": r
-            for r in baseline_results
+            f"{r['suite']}/{r['name']}/{r['algorithm']}": r for r in baseline_results
         }
 
         regressions: list[str] = []
@@ -307,5 +311,6 @@ class Orchestrator:
         if not self.db_path:
             return True, ["Pas de DB configurée — skip détection DB."]
         with HistoryDB(self.db_path) as db:
-            return db.detect_regression(results, n_baseline=n_baseline,
-                                        threshold_pct=threshold_pct, tag=tag)
+            return db.detect_regression(
+                results, n_baseline=n_baseline, threshold_pct=threshold_pct, tag=tag
+            )

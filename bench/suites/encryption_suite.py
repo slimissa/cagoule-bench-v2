@@ -17,10 +17,10 @@ from bench.metrics import CpuCollector, MemoryCollector, TimeCollector
 from bench.suites.base import BaseSuite, BenchmarkResult, _detect_arch
 
 # ── CAGOULE v2.2.0 import ─────────────────────────────────────────────────────
-BENCHMARK_SALT = b'\xca\xf0' * 16  # 32 octets fixes, reproductible
+BENCHMARK_SALT = b"\xca\xf0" * 16  # 32 octets fixes, reproductible
 
 CAGOULE_AVAILABLE = False
-CAGOULE_V22 = False       # AVX2 + DiffusionMatrixC.free() + backend_info
+CAGOULE_V22 = False  # AVX2 + DiffusionMatrixC.free() + backend_info
 CAGOULE_PARAMS = False
 CAGOULE_BACKEND: dict = {}
 
@@ -30,6 +30,7 @@ try:
     # v2.2.0: backend_info dict exposing matrix/omega backend
     try:
         from cagoule import backend_info as _cagoule_backend_info
+
         CAGOULE_BACKEND = _cagoule_backend_info
         CAGOULE_V22 = True
     except ImportError:
@@ -37,6 +38,7 @@ try:
 
     try:
         from cagoule.params import CagouleParams
+
         CAGOULE_PARAMS = True
     except ImportError:
         pass
@@ -44,10 +46,12 @@ try:
     CAGOULE_AVAILABLE = True
 
 except ImportError:
+
     def cagoule_encrypt(plaintext: bytes, password: bytes, **kwargs) -> bytes:
         """Mock XOR — NOT real crypto, benchmark harness only."""
         key = password * (len(plaintext) // len(password) + 1)
         return bytes(p ^ k for p, k in zip(plaintext, key[: len(plaintext)]))
+
 
 try:
     from cagoule import decrypt as cagoule_decrypt
@@ -56,11 +60,11 @@ except ImportError:
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_SIZES = [
-    1_024,        # 1 KB
-    8_192,        # 8 KB
-    65_536,       # 64 KB
-    1_048_576,    # 1 MB
-    10_485_760,   # 10 MB
+    1_024,  # 1 KB
+    8_192,  # 8 KB
+    65_536,  # 64 KB
+    1_048_576,  # 1 MB
+    10_485_760,  # 10 MB
 ]
 
 PASSWORD = b"cagoule-bench-v2-reference-password"
@@ -69,6 +73,7 @@ CHACHA_KEY = os.urandom(32)
 
 
 # ── Primitives ────────────────────────────────────────────────────────────────
+
 
 def _aes_encrypt(plaintext: bytes) -> bytes:
     aes = AESGCM(AES_KEY)
@@ -97,7 +102,9 @@ def _cagoule_decrypt(ciphertext: bytes, password: bytes, **kwargs) -> bytes:
         return cagoule_decrypt(ciphertext, password, **kwargs)
     return cagoule_encrypt(ciphertext, password)
 
+
 # ── Suite ─────────────────────────────────────────────────────────────────────
+
 
 class EncryptionSuite(BaseSuite):
     NAME = "encryption"
@@ -146,8 +153,12 @@ class EncryptionSuite(BaseSuite):
 
             # ── CAGOULE ──────────────────────────────────────────────
             if self._cagoule_params is not None:
-                _enc_cag = lambda pt=plaintext: cagoule_encrypt(pt, PASSWORD, params=self._cagoule_params)
-                _dec_cag = lambda ct=cagoule_ct: _cagoule_decrypt(ct, PASSWORD, params=self._cagoule_params)
+                _enc_cag = lambda pt=plaintext: cagoule_encrypt(
+                    pt, PASSWORD, params=self._cagoule_params
+                )
+                _dec_cag = lambda ct=cagoule_ct: _cagoule_decrypt(
+                    ct, PASSWORD, params=self._cagoule_params
+                )
             else:
                 _enc_cag = lambda pt=plaintext: cagoule_encrypt(pt, PASSWORD)
                 _dec_cag = lambda ct=cagoule_ct: _cagoule_decrypt(ct, PASSWORD)
@@ -156,12 +167,34 @@ class EncryptionSuite(BaseSuite):
             results.extend(self._bench(f"decrypt-{size_label}", "CAGOULE", _dec_cag, size))
 
             # ── AES-256-GCM ───────────────────────────────────────────
-            results.extend(self._bench(f"encrypt-{size_label}", "AES-256-GCM", lambda: _aes_encrypt(plaintext), size))
-            results.extend(self._bench(f"decrypt-{size_label}", "AES-256-GCM", lambda: _aes_decrypt(aes_ct), size))
+            results.extend(
+                self._bench(
+                    f"encrypt-{size_label}", "AES-256-GCM", lambda: _aes_encrypt(plaintext), size
+                )
+            )
+            results.extend(
+                self._bench(
+                    f"decrypt-{size_label}", "AES-256-GCM", lambda: _aes_decrypt(aes_ct), size
+                )
+            )
 
             # ── ChaCha20-Poly1305 ─────────────────────────────────────
-            results.extend(self._bench(f"encrypt-{size_label}", "ChaCha20-Poly1305", lambda: _chacha_encrypt(plaintext), size))
-            results.extend(self._bench(f"decrypt-{size_label}", "ChaCha20-Poly1305", lambda: _chacha_decrypt(chacha_ct), size))
+            results.extend(
+                self._bench(
+                    f"encrypt-{size_label}",
+                    "ChaCha20-Poly1305",
+                    lambda: _chacha_encrypt(plaintext),
+                    size,
+                )
+            )
+            results.extend(
+                self._bench(
+                    f"decrypt-{size_label}",
+                    "ChaCha20-Poly1305",
+                    lambda: _chacha_decrypt(chacha_ct),
+                    size,
+                )
+            )
 
         return results
 
@@ -172,36 +205,40 @@ class EncryptionSuite(BaseSuite):
             self._mem.measure(op)
         _, mem = self._mem.measure(op, label=f"{algorithm}-{name}")
 
-        timing = self._timer.measure(op, iterations=self.iterations, warmup=self.warmup, label=f"{algorithm}-{name}")
+        timing = self._timer.measure(
+            op, iterations=self.iterations, warmup=self.warmup, label=f"{algorithm}-{name}"
+        )
         _, cpu = self._cpu.measure(op, label=f"{algorithm}-{name}")
 
-        return [self._make_result(
-            name=name,
-            algorithm=algorithm,
-            data_size_bytes=data_size,
-            mean_ms=timing.mean_ms,
-            stddev_ms=timing.stddev_ms,
-            min_ms=timing.min_ms,
-            max_ms=timing.max_ms,
-            p95_ms=timing.p95_ms,
-            p99_ms=timing.p99_ms,
-            cv_percent=timing.cv_percent,
-            throughput_mbps=timing.throughput_mbps(data_size),
-            peak_mb=mem.peak_mb,
-            delta_mb=mem.delta_mb,
-            cpu_mean_pct=cpu.cpu_mean_pct,
-            cpu_peak_pct=cpu.cpu_peak_pct,
-            # v2.0 : samples bruts pour Mann-Whitney
-            samples_ns=timing.samples_ns if self.store_samples else [],
-            extra={
-                "cagoule_available": CAGOULE_AVAILABLE,
-                "cagoule_v22": CAGOULE_V22,
-                "matrix_backend": CAGOULE_BACKEND.get("matrix_backend", "mock"),
-                "omega_backend": CAGOULE_BACKEND.get("omega_backend", "mock"),
-                "params_precomputed": self._cagoule_params is not None,
-                "arch": self._arch,
-            },
-        )]
+        return [
+            self._make_result(
+                name=name,
+                algorithm=algorithm,
+                data_size_bytes=data_size,
+                mean_ms=timing.mean_ms,
+                stddev_ms=timing.stddev_ms,
+                min_ms=timing.min_ms,
+                max_ms=timing.max_ms,
+                p95_ms=timing.p95_ms,
+                p99_ms=timing.p99_ms,
+                cv_percent=timing.cv_percent,
+                throughput_mbps=timing.throughput_mbps(data_size),
+                peak_mb=mem.peak_mb,
+                delta_mb=mem.delta_mb,
+                cpu_mean_pct=cpu.cpu_mean_pct,
+                cpu_peak_pct=cpu.cpu_peak_pct,
+                # v2.0 : samples bruts pour Mann-Whitney
+                samples_ns=timing.samples_ns if self.store_samples else [],
+                extra={
+                    "cagoule_available": CAGOULE_AVAILABLE,
+                    "cagoule_v22": CAGOULE_V22,
+                    "matrix_backend": CAGOULE_BACKEND.get("matrix_backend", "mock"),
+                    "omega_backend": CAGOULE_BACKEND.get("omega_backend", "mock"),
+                    "params_precomputed": self._cagoule_params is not None,
+                    "arch": self._arch,
+                },
+            )
+        ]
 
     def __del__(self):
         if CAGOULE_AVAILABLE and CAGOULE_PARAMS:

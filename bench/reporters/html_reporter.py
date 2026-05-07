@@ -338,8 +338,7 @@ class HtmlReporter:
             algos = ["CAGOULE", "AES-256-GCM", "ChaCha20-Poly1305"]
             chart_data["enc_labels"] = test_names
             chart_data["enc_by_algo"] = {
-                algo: [round(by_test[t].get(algo, 0), 2) for t in test_names]
-                for algo in algos
+                algo: [round(by_test[t].get(algo, 0), 2) for t in test_names] for algo in algos
             }
 
         if kdf:
@@ -365,7 +364,11 @@ class HtmlReporter:
             def __init__(self, r):
                 self.__dict__ = r.to_dict().copy()
                 self.__dict__.update(r.__dict__)
-                self.overhead_vs_aes = r.overhead_vs(type("X", (), {"throughput_mbps": aes_by_name.get(r.name, 0)})()) if aes_by_name.get(r.name) else 0.0
+                self.overhead_vs_aes = (
+                    r.overhead_vs(type("X", (), {"throughput_mbps": aes_by_name.get(r.name, 0)})())
+                    if aes_by_name.get(r.name)
+                    else 0.0
+                )
 
         # Summary stats
         cagoule_enc = [r for r in enc if r.algorithm == "CAGOULE"]

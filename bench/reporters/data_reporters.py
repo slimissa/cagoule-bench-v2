@@ -53,11 +53,22 @@ class JsonReporter:
 # ──────────────────────────────────────────────────────────────
 class CsvReporter:
     FIELDS = [
-        "suite", "name", "algorithm", "data_size_bytes",
-        "throughput_mbps", "mean_ms", "stddev_ms", "p95_ms", "p99_ms",
-        "cv_percent", "peak_mb", "delta_mb",
-        "cpu_mean_pct", "cpu_peak_pct",
-        "platform", "timestamp",
+        "suite",
+        "name",
+        "algorithm",
+        "data_size_bytes",
+        "throughput_mbps",
+        "mean_ms",
+        "stddev_ms",
+        "p95_ms",
+        "p99_ms",
+        "cv_percent",
+        "peak_mb",
+        "delta_mb",
+        "cpu_mean_pct",
+        "cpu_peak_pct",
+        "platform",
+        "timestamp",
     ]
 
     def report(self, results: list[BenchmarkResult], output_path: str | Path) -> None:
@@ -155,7 +166,8 @@ class MarkdownReporter:
             cha = algos.get("ChaCha20-Poly1305", 0)
 
             def _pct(a, b):
-                if b == 0: return "N/A"
+                if b == 0:
+                    return "N/A"
                 p = (a - b) / b * 100
                 return f"{p:+.1f}%"
 

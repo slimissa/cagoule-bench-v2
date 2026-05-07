@@ -24,6 +24,7 @@ from bench.suites.base import BaseSuite, BenchmarkResult
 
 try:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
+
     CRYPTO_AVAILABLE = True
 except ImportError:
     CRYPTO_AVAILABLE = False
@@ -32,36 +33,40 @@ except ImportError:
 
 CAGOULE_AVAILABLE = False
 CAGOULE_PARAMS = None
-BENCHMARK_SALT = b'\xca\xf0' * 16
+BENCHMARK_SALT = b"\xca\xf0" * 16
 PASSWORD = b"cagoule-bench-v2-streaming-test"
 
 try:
     from cagoule import encrypt as cagoule_encrypt
     from cagoule.params import CagouleParams
+
     CAGOULE_AVAILABLE = True
     CAGOULE_PARAMS = CagouleParams.derive_for_benchmark(
         PASSWORD, fast_mode=True, salt=BENCHMARK_SALT
     )
 except ImportError:
+
     def cagoule_encrypt(plaintext: bytes, password: bytes, **kwargs) -> bytes:
         """Fallback mock — NOT real crypto, benchmark harness only."""
         key = password * (len(plaintext) // len(password) + 1)
-        return bytes(p ^ k for p, k in zip(plaintext, key[:len(plaintext)]))
+        return bytes(p ^ k for p, k in zip(plaintext, key[: len(plaintext)]))
+
 
 # Configuration streaming
 DEFAULT_STREAM_SIZES = [
-    50 * 1_048_576,   # 50 MB
+    50 * 1_048_576,  # 50 MB
     100 * 1_048_576,  # 100 MB
     500 * 1_048_576,  # 500 MB
 ]
 
-CHUNK_SIZE = 64 * 1024   # 64 KB chunks (balance entre CPU et RAM)
+CHUNK_SIZE = 64 * 1024  # 64 KB chunks (balance entre CPU et RAM)
 
-AES_KEY_STREAM = AESGCM.generate_key(bit_length=256) if CRYPTO_AVAILABLE else b'\x00' * 32
+AES_KEY_STREAM = AESGCM.generate_key(bit_length=256) if CRYPTO_AVAILABLE else b"\x00" * 32
 CHACHA_KEY_STREAM = os.urandom(32)
 
 
 # ── Streaming helpers ─────────────────────────────────────────────────────────
+
 
 def _stream_aes_encrypt(data_size: int, chunk_size: int = CHUNK_SIZE) -> tuple[float, int]:
     """
@@ -131,6 +136,7 @@ def _stream_cagoule_encrypt(data_size: int, chunk_size: int = CHUNK_SIZE) -> tup
 
 # ── Suite ─────────────────────────────────────────────────────────────────────
 
+
 class StreamingSuite(BaseSuite):
     NAME = "streaming"
     DESCRIPTION = "Chiffrement en streaming — 50MB/100MB/500MB, chunks 64KB"
@@ -162,6 +168,7 @@ class StreamingSuite(BaseSuite):
                 ("ChaCha20-Poly1305", _stream_chacha_encrypt),
                 ("CAGOULE", _stream_cagoule_encrypt),
             ]:
+
                 def _op(s=size, fn=stream_fn):
                     return fn(s, self.chunk_size)
 
@@ -175,8 +182,8 @@ class StreamingSuite(BaseSuite):
                     timings_s.append(duration)
 
                 mean_s = statistics.mean(timings_s)
-                std_s  = statistics.stdev(timings_s) if len(timings_s) > 1 else 0.0
-                p95_s  = sorted(timings_s)[int(len(timings_s) * 0.95)]
+                std_s = statistics.stdev(timings_s) if len(timings_s) > 1 else 0.0
+                p95_s = sorted(timings_s)[int(len(timings_s) * 0.95)]
 
                 throughput = (size / 1_048_576) / mean_s if mean_s > 0 else 0.0
 
@@ -184,32 +191,36 @@ class StreamingSuite(BaseSuite):
                 _, mem = self._mem.measure(lambda: _op(), label=f"stream-{algo}-{size_label}")
                 _, cpu = self._cpu.measure(lambda: _op(), label=f"stream-{algo}-{size_label}")
 
-                results.append(self._make_result(
-                    name=f"stream-encrypt-{size_label}",
-                    algorithm=algo,
-                    data_size_bytes=size,
-                    mean_ms=mean_s * 1000,
-                    stddev_ms=std_s * 1000,
-                    min_ms=min(timings_s) * 1000,
-                    max_ms=max(timings_s) * 1000,
-                    p95_ms=p95_s * 1000,
-                    p99_ms=sorted(timings_s)[int(len(timings_s) * 0.99)] * 1000,
-                    cv_percent=(std_s / mean_s * 100) if mean_s > 0 else 0.0,
-                    throughput_mbps=throughput,
-                    peak_mb=mem.peak_mb,
-                    delta_mb=mem.delta_mb,
-                    cpu_mean_pct=cpu.cpu_mean_pct,
-                    cpu_peak_pct=cpu.cpu_peak_pct,
-                    samples_ns=[int(t * 1e9) for t in timings_s],
-                    extra={
-                        "chunk_size_kb": self.chunk_size // 1024,
-                        "total_mb": size / 1_048_576,
-                        "chunks_count": size // self.chunk_size,
-                        "streaming_mode": True,
-                        "ram_efficiency": "O(chunk)" if mem.peak_mb < (size / 1_048_576 * 0.1) else "O(total)",
-                        "cagoule_available": CAGOULE_AVAILABLE,
-                        "note_non_ce_generation": "Includes os.urandom(12) nonce generation per chunk — realistic streaming overhead",
-                    },
-                ))
+                results.append(
+                    self._make_result(
+                        name=f"stream-encrypt-{size_label}",
+                        algorithm=algo,
+                        data_size_bytes=size,
+                        mean_ms=mean_s * 1000,
+                        stddev_ms=std_s * 1000,
+                        min_ms=min(timings_s) * 1000,
+                        max_ms=max(timings_s) * 1000,
+                        p95_ms=p95_s * 1000,
+                        p99_ms=sorted(timings_s)[int(len(timings_s) * 0.99)] * 1000,
+                        cv_percent=(std_s / mean_s * 100) if mean_s > 0 else 0.0,
+                        throughput_mbps=throughput,
+                        peak_mb=mem.peak_mb,
+                        delta_mb=mem.delta_mb,
+                        cpu_mean_pct=cpu.cpu_mean_pct,
+                        cpu_peak_pct=cpu.cpu_peak_pct,
+                        samples_ns=[int(t * 1e9) for t in timings_s],
+                        extra={
+                            "chunk_size_kb": self.chunk_size // 1024,
+                            "total_mb": size / 1_048_576,
+                            "chunks_count": size // self.chunk_size,
+                            "streaming_mode": True,
+                            "ram_efficiency": (
+                                "O(chunk)" if mem.peak_mb < (size / 1_048_576 * 0.1) else "O(total)"
+                            ),
+                            "cagoule_available": CAGOULE_AVAILABLE,
+                            "note_non_ce_generation": "Includes os.urandom(12) nonce generation per chunk — realistic streaming overhead",
+                        },
+                    )
+                )
 
         return results

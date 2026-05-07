@@ -23,9 +23,11 @@ from typing import Sequence
 
 # ── Mann-Whitney U ────────────────────────────────────────────────────────────
 
+
 @dataclass
 class MannWhitneyResult:
     """Résultat du test de Mann-Whitney U."""
+
     u_statistic: float
     p_value: float
     # BUG9 FIX: rank-biserial correlation r = 1 - 2*U_min/(n1*n2), range [0,1]
@@ -44,9 +46,12 @@ class MannWhitneyResult:
     def effect_label(self) -> str:
         # Rank-biserial r ∈ [0, 1] : 0 = aucun effet, 1 = séparation parfaite
         r = abs(self.effect_size_r)
-        if r < 0.1: return "negligible"
-        if r < 0.3: return "small"
-        if r < 0.5: return "medium"
+        if r < 0.1:
+            return "negligible"
+        if r < 0.3:
+            return "small"
+        if r < 0.5:
+            return "medium"
         return "large"
 
     def to_dict(self) -> dict:
@@ -66,7 +71,9 @@ class MannWhitneyResult:
 def _normal_cdf(z: float) -> float:
     """CDF de la loi normale standard (approximation Abramowitz & Stegun)."""
     t = 1.0 / (1.0 + 0.2316419 * abs(z))
-    poly = t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))))
+    poly = t * (
+        0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429)))
+    )
     p = 1.0 - (1.0 / math.sqrt(2 * math.pi)) * math.exp(-0.5 * z * z) * poly
     return p if z > 0 else 1.0 - p
 
@@ -93,8 +100,13 @@ def mann_whitney_u(
     n1, n2 = len(a), len(b)
     if n1 < 2 or n2 < 2:
         return MannWhitneyResult(
-            u_statistic=0.0, p_value=1.0, effect_size_r=0.0,
-            significant=False, alpha=alpha, n1=n1, n2=n2,
+            u_statistic=0.0,
+            p_value=1.0,
+            effect_size_r=0.0,
+            significant=False,
+            alpha=alpha,
+            n1=n1,
+            n2=n2,
             median_a=statistics.median(a) if a else 0.0,
             median_b=statistics.median(b) if b else 0.0,
             interpretation="Pas assez de données pour le test.",
@@ -111,7 +123,7 @@ def mann_whitney_u(
     std_u = math.sqrt(n1 * n2 * (n1 + n2 + 1) / 12)
     z = (u_stat - mean_u) / std_u if std_u > 0 else 0.0
 
-    p_value = 2 * (1 - _normal_cdf(abs(z)))   # bilatéral
+    p_value = 2 * (1 - _normal_cdf(abs(z)))  # bilatéral
 
     # Rank-biserial correlation : 0 = no effect, 1 = perfect separation
     # r = 1 - 2*U_min/(n1*n2) — range [0, 1] avec 1 = effet maximal
@@ -146,6 +158,7 @@ def mann_whitney_u(
 
 # ── Cohen's d ────────────────────────────────────────────────────────────────
 
+
 def cohens_d(a: Sequence[float], b: Sequence[float]) -> float:
     """
     Cohen's d — effect size paramétrique.
@@ -163,6 +176,7 @@ def cohens_d(a: Sequence[float], b: Sequence[float]) -> float:
 
 
 # ── Bootstrap CI ─────────────────────────────────────────────────────────────
+
 
 def bootstrap_ci(
     samples: Sequence[float],
@@ -191,6 +205,7 @@ def bootstrap_ci(
 
 # ── Comparaison complète ──────────────────────────────────────────────────────
 
+
 @dataclass
 class StatComparison:
     """
@@ -199,14 +214,15 @@ class StatComparison:
     Combine Mann-Whitney U, Cohen's d et bootstrap CI pour
     une analyse publication-ready.
     """
+
     algo_a: str
     algo_b: str
     mann_whitney: MannWhitneyResult
     cohens_d: float
-    ci_a: tuple[float, float]   # 95% bootstrap CI mean
+    ci_a: tuple[float, float]  # 95% bootstrap CI mean
     ci_b: tuple[float, float]
-    ratio_medians: float        # median_b / median_a — speedup factor
-    overhead_pct: float         # (median_a - median_b) / median_b * 100
+    ratio_medians: float  # median_b / median_a — speedup factor
+    overhead_pct: float  # (median_a - median_b) / median_b * 100
 
     @property
     def verdict(self) -> str:
