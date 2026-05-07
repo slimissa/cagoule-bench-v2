@@ -1,0 +1,208 @@
+name: cagoule-bench CI
+
+on:
+  push:
+    branches: [main, "feat/**", "bench/**"]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 2 * * 1"  # Monday 02:00 UTC
+
+concurrency:
+  group: cagoule-bench-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  test:
+    name: Tests — Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests (fast, no real crypto)
+        run: pytest tests/ -v --tb=short -m "not slow" --cov=bench --cov-report=xml
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  benchmark:
+    name: Benchmark — x86_64
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install "cagoule>=2.2.0" || true
+          pip install -e ".[dev]"
+
+      - name: Detect environment
+        run: cagoule-bench info || true
+
+      - name: Restore baseline
+        uses: actions/cache@v4
+        id: baseline-cache
+        with:
+          path: benchmark_results/baseline.json
+          key: bench-baseline-${{ runner.os }}-x86_64
+          restore-keys: bench-baseline-${{ runner.os }}-
+
+      - name: Run benchmarks
+        id: bench
+        run: |
+          cagoule-bench run \
+            --suite encryption avx2 parallel \
+            --format json html \
+            --output benchmark_results \
+            --iterations 100 \
+            --warmup 5 \
+            --tag "${{ github.ref_name }}" \
+            ${{ steps.baseline-cache.outputs.cache-hit == 'true' && '--baseline benchmark_results/baseline.json' || '' }}
+
+      - name: Update baseline (main only)
+        if: github.ref == 'refs/heads/main' && success()
+        run: cp benchmark_results/bench_*.json benchmark_results/baseline.json
+
+      - name: Save baseline cache
+        if: github.ref == 'refs/heads/main' && success()
+        uses: actions/cache@v4
+        with:
+          path: benchmark_results/baseline.json
+          key: bench-baseline-${{ runner.os }}-x86_64
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: benchmark_results/
+          retention-days: 90
+
+  benchmark-scalar:
+    name: Benchmark — Scalar forced
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install "cagoule>=2.2.0" || true
+          pip install -e ".[dev]"
+
+      - name: Run in scalar mode
+        env:
+          CAGOULE_FORCE_SCALAR: "1"
+        run: |
+          cagoule-bench run \
+            --suite encryption \
+            --format json \
+            --output benchmark_results_scalar \
+            --iterations 100 \
+            --warmup 5 \
+            --tag "scalar-${{ github.ref_name }}"
+
+      - name: Upload scalar results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-scalar-${{ github.sha }}
+          path: benchmark_results_scalar/
+          retention-days: 30
+
+  benchmark-arm64:
+    name: Benchmark — ARM64
+    runs-on: ubuntu-24.04-arm
+    needs: test
+    if: github.ref == 'refs/heads/main' || github.event_name == 'schedule'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install "cagoule>=2.2.0" || true
+          pip install -e ".[dev]"
+
+      - name: Detect environment
+        run: cagoule-bench info
+
+      - name: Run benchmark ARM64
+        run: |
+          cagoule-bench run \
+            --suite encryption \
+            --format json \
+            --output benchmark_arm64 \
+            --iterations 100 \
+            --warmup 5 \
+            --tag "arm64-${{ github.ref_name }}"
+
+      - name: Upload ARM64 results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-arm64-${{ github.sha }}
+          path: benchmark_arm64/
+          retention-days: 30
+
+  lint:
+    name: Linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dev deps
+        run: pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check bench/ tests/
+
+      - name: Black check
+        run: black --check bench/ tests/
