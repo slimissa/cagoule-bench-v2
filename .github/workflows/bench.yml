@@ -80,8 +80,11 @@ jobs:
         id: bench
         run: |
           cagoule-bench run \
-            --suite encryption avx2 parallel \
-            --format json html \
+            --suite encryption \
+            --suite avx2 \
+            --suite parallel \
+            --format json \
+            --format html \
             --output benchmark_results \
             --iterations 100 \
             --warmup 5 \
