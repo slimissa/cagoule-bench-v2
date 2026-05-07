@@ -15,11 +15,11 @@ Cette suite est critique pour les cas d'usage QuantOS :
   - Sauvegarde vault cagoule-pass
 """
 
-import io
 import os
-import time
 import statistics  # BUG mineur FIX: import au niveau module, pas dans la boucle interne
-from bench.metrics import TimeCollector, MemoryCollector, CpuCollector
+import time
+
+from bench.metrics import CpuCollector, MemoryCollector
 from bench.suites.base import BaseSuite, BenchmarkResult
 
 try:

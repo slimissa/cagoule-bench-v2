@@ -2,8 +2,7 @@
 tests/test_config.py — Tests du loader de configuration v2.0.
 """
 
-import pytest
-from bench.config import BenchConfig, DEFAULTS
+from bench.config import DEFAULTS, BenchConfig
 
 
 class TestBenchConfigDefaults:

@@ -21,7 +21,6 @@ import statistics
 from dataclasses import dataclass
 from typing import Sequence
 
-
 # ── Mann-Whitney U ────────────────────────────────────────────────────────────
 
 @dataclass

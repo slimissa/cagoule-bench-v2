@@ -10,16 +10,13 @@ Teste :
 """
 
 import statistics
-import pytest
-from bench.metrics.stats import (
-    mann_whitney_u,
-    cohens_d,
-    bootstrap_ci,
-    compare_algorithms,
-    StatComparison,
-    MannWhitneyResult,
-)
 
+from bench.metrics.stats import (
+    bootstrap_ci,
+    cohens_d,
+    compare_algorithms,
+    mann_whitney_u,
+)
 
 # ── Données de test ───────────────────────────────────────────────────────────
 

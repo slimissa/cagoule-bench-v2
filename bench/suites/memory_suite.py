@@ -9,8 +9,8 @@ Mesure :
 """
 
 import os
-import time
-from bench.metrics import TimeCollector, MemoryCollector, CpuCollector
+
+from bench.metrics import CpuCollector, MemoryCollector, TimeCollector
 from bench.suites.base import BaseSuite, BenchmarkResult
 
 # Tailles de vault à tester

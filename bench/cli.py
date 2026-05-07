@@ -26,12 +26,12 @@ import time
 from pathlib import Path
 
 import click
+from rich import box
 from rich.console import Console
 from rich.table import Table
-from rich import box
 
 from bench.config import BenchConfig
-from bench.orchestrator import Orchestrator, BenchmarkError, CAGOULE_VERSION, _CAGOULE_BACKEND
+from bench.orchestrator import _CAGOULE_BACKEND, CAGOULE_VERSION, BenchmarkError, Orchestrator
 from bench.suites import ALL_SUITES
 
 console = Console()
@@ -330,7 +330,7 @@ def history(db, limit, tag, detail):
                 tp_str,
             )
         console.print(t)
-        console.print(f"\n[dim]Pour voir le détail d'un run : cagoule-bench history --detail <run_id>[/dim]")
+        console.print("\n[dim]Pour voir le détail d'un run : cagoule-bench history --detail <run_id>[/dim]")
 
 
 # ── compare-history ───────────────────────────────────────────────────────────
@@ -431,8 +431,8 @@ def profile(suite_name, iterations, warmup, size):
 @main.command()
 def info():
     """Affiche les informations sur l'environnement CAGOULE et le système."""
-    import platform as pl
     import os as _os
+    import platform as pl
 
     console.print()
     console.rule("[bold blue]cagoule-bench v2.0.0 — Environment Info[/bold blue]")

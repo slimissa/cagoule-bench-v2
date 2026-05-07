@@ -9,7 +9,9 @@ import json
 import platform
 import time
 from pathlib import Path
+
 from jinja2 import Template
+
 from bench.suites.base import BenchmarkResult
 
 _TEMPLATE = """<!DOCTYPE html>

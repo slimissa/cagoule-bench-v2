@@ -15,9 +15,18 @@ Nouveautés v2.0 :
 
 __version__ = "2.0.0"
 
-from bench.metrics import TimeCollector, MemoryCollector, CpuCollector
-from bench.metrics.stats import StatComparison, MannWhitneyResult
+from bench.db.history import HistoryDB, RunRecord
+from bench.metrics import CpuCollector, MemoryCollector, TimeCollector
+from bench.metrics.stats import MannWhitneyResult, StatComparison
+from bench.reporters import (
+    ConsoleReporter,
+    CsvReporter,
+    HtmlReporter,
+    JsonReporter,
+    MarkdownReporter,
+)
 from bench.suites import (
+    ALL_SUITES,
     BaseSuite,
     BenchmarkResult,
     EncryptionSuite,
@@ -25,16 +34,7 @@ from bench.suites import (
     MemorySuite,
     ParallelSuite,
     StreamingSuite,
-    ALL_SUITES,
 )
-from bench.reporters import (
-    ConsoleReporter,
-    JsonReporter,
-    CsvReporter,
-    MarkdownReporter,
-    HtmlReporter,
-)
-from bench.db.history import HistoryDB, RunRecord
 
 __all__ = [
     # Version

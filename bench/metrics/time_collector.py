@@ -5,9 +5,9 @@ Utilise time.perf_counter_ns() pour une résolution nanoseconde.
 Calcule mean, stddev, p95, p99, min, max sur N itérations.
 """
 
-import time
 import statistics
-from dataclasses import dataclass, field
+import time
+from dataclasses import dataclass
 from typing import Callable
 
 

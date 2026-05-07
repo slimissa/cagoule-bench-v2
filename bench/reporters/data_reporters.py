@@ -4,12 +4,13 @@ CsvReporter — export CSV (Excel/Google Sheets compatible).
 MarkdownReporter — rapport Markdown prêt pour README.
 """
 
-import json
 import csv
 import io
+import json
 import platform
 import time
 from pathlib import Path
+
 from bench.suites.base import BenchmarkResult
 
 
@@ -100,7 +101,7 @@ class MarkdownReporter:
             "",
             f"**Généré le :** {ts}  ",
             f"**Plateforme :** {platform.machine()} / Python {platform.python_version()}  ",
-            f"**CAGOULE :** v1.2+  ",
+            "**CAGOULE :** v1.2+  ",
             "",
         ]
 

@@ -7,9 +7,9 @@ Les tests marqués @pytest.mark.slow sont skipped par défaut.
 """
 
 import pytest
-from bench.suites.base import BenchmarkResult, BaseSuite
-from bench.suites import ALL_SUITES
 
+from bench.suites import ALL_SUITES
+from bench.suites.base import BenchmarkResult
 
 # ── BaseSuite + BenchmarkResult ───────────────────────────────────────────────
 
@@ -302,7 +302,7 @@ class TestAVX2Suite:
 
 class TestOrchestrator:
     def test_unknown_suite_raises(self):
-        from bench.orchestrator import Orchestrator, BenchmarkError
+        from bench.orchestrator import BenchmarkError, Orchestrator
         with pytest.raises(BenchmarkError, match="inconnues"):
             Orchestrator(suites=["nonexistent_suite"])
 
@@ -321,6 +321,7 @@ class TestOrchestrator:
 
     def test_regression_check_detects_regression(self, tmp_path):
         import json
+
         from bench.orchestrator import Orchestrator
         # BUG4 FIX: tester les deux formats JSON (liste plate ET dict)
         for fmt_name, baseline in [

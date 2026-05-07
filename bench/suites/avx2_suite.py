@@ -19,7 +19,7 @@ import os
 import subprocess
 import sys
 
-from bench.metrics import TimeCollector, MemoryCollector
+from bench.metrics import MemoryCollector, TimeCollector
 from bench.suites.base import BaseSuite, BenchmarkResult
 
 # BUG3 FIX: CAGOULE_AVAILABLE défini AVANT la classe (plus d'assignation fantôme en bas de fichier)
@@ -29,8 +29,8 @@ CAGOULE_PARAMS = False
 cagoule_backend_info: dict = {}
 
 try:
-    from cagoule import encrypt as cagoule_encrypt
     from cagoule import backend_info as _cag_backend
+    from cagoule import encrypt as cagoule_encrypt
     cagoule_backend_info = _cag_backend
     CAGOULE_V22 = True
     CAGOULE_AVAILABLE = True

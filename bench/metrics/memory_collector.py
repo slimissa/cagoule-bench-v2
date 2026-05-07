@@ -7,7 +7,7 @@ Retourne peak, delta, nombre d'allocations, fragmentation estimée.
 
 import tracemalloc
 from dataclasses import dataclass
-from typing import Callable, Any, List  # FIXED: Added List import
+from typing import Any, Callable, List  # FIXED: Added List import
 
 
 @dataclass

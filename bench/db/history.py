@@ -25,7 +25,6 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from bench.suites.base import BenchmarkResult
 
@@ -85,7 +84,7 @@ class HistoryDB:
 
     def _init_schema(self) -> None:
         c = self._conn.cursor()
-        c.executescript(f"""
+        c.executescript("""
             PRAGMA journal_mode=WAL;
             PRAGMA foreign_keys=ON;
 

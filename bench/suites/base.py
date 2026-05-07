@@ -15,7 +15,6 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
 
 
 def _detect_arch() -> str:

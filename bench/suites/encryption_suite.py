@@ -10,9 +10,10 @@ Nouveautés v2.0 :
 """
 
 import os
+
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 
-from bench.metrics import TimeCollector, MemoryCollector, CpuCollector
+from bench.metrics import CpuCollector, MemoryCollector, TimeCollector
 from bench.suites.base import BaseSuite, BenchmarkResult, _detect_arch
 
 # ── CAGOULE v2.2.0 import ─────────────────────────────────────────────────────

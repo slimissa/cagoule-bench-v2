@@ -21,16 +21,16 @@ from typing import Callable
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
-from bench.suites import ALL_SUITES
-from bench.suites.base import BenchmarkResult
+from bench.db.history import HistoryDB
 from bench.reporters import (
     ConsoleReporter,
-    JsonReporter,
     CsvReporter,
-    MarkdownReporter,
     HtmlReporter,
+    JsonReporter,
+    MarkdownReporter,
 )
-from bench.db.history import HistoryDB
+from bench.suites import ALL_SUITES
+from bench.suites.base import BenchmarkResult
 
 console = Console()
 

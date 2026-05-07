@@ -13,13 +13,14 @@ Algorithmes :
   - scrypt (3 configurations)
 """
 
-import os
-import math
 import hashlib
 import itertools
-from argon2.low_level import hash_secret_raw, Type
+import math
+import os
 
-from bench.metrics import TimeCollector, MemoryCollector, CpuCollector
+from argon2.low_level import Type, hash_secret_raw
+
+from bench.metrics import CpuCollector, MemoryCollector, TimeCollector
 from bench.suites.base import BaseSuite, BenchmarkResult
 
 PASSWORD = b"cagoule-bench-kdf-v2-test-password"

@@ -2,10 +2,10 @@
 tests/test_db.py — Tests de la base SQLite d'historique v2.0.
 """
 
+
 import pytest
-import statistics
-from pathlib import Path
-from bench.db.history import HistoryDB, RunRecord, TrendPoint
+
+from bench.db.history import HistoryDB
 from bench.suites.base import BenchmarkResult
 
 

@@ -5,12 +5,13 @@ Mesure CPU%, RAM système, context switches pendant l'exécution
 d'une callable. Particulièrement utile pour la suite parallèle.
 """
 
-import time
-import threading
-import psutil
 import os
-from dataclasses import dataclass, field
-from typing import Callable, Any
+import threading
+import time
+from dataclasses import dataclass
+from typing import Any, Callable
+
+import psutil
 
 
 @dataclass

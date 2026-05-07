@@ -10,7 +10,8 @@ v2.0.0 : CAGOULE réel avec params pré-dérivés (remplace mock XOR).
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from bench.metrics import TimeCollector, MemoryCollector, CpuCollector
+
+from bench.metrics import CpuCollector, MemoryCollector, TimeCollector
 from bench.suites.base import BaseSuite, BenchmarkResult
 
 # Configuration
