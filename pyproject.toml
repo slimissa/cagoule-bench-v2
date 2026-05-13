@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cagoule-bench"
-version = "2.0.0"
-description = "Suite de benchmarking cryptographique pour CAGOULE — v2.0"
+version = "2.1.0"
+description = "Suite de benchmarking cryptographique pour CAGOULE v2.3.0"
 authors = [{ name = "LASS", email = "slimissa@example.com" }]
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "cagoule>=2.2.0",
     "cryptography>=41.0",
     "argon2-cffi>=21.3",
     "psutil>=5.9",

@@ -15,7 +15,7 @@ from bench.metrics import CpuCollector, MemoryCollector, TimeCollector
 from bench.suites.base import BaseSuite, BenchmarkResult
 
 # Configuration
-WORKER_COUNTS = [1, 2, 4, 8]
+WORKER_COUNTS = [1, 2, 4, 8, 16, 20]
 NUM_OPERATIONS = 200  # Réduit pour cible < 90s (200 × 1 MB = 200 MB)
 DATA_SIZE = 1024 * 1024  # 1MB par opération
 

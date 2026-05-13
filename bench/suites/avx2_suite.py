@@ -1,5 +1,5 @@
 """
-AVX2Suite v2.0.0 — benchmark spécifique CAGOULE v2.2.0.
+AVX2Suite v2.1.0 — benchmark spécifique CAGOULE v2.3.0.
 
 BUG CRITIQUE CORRIGÉ (v2.0.0) :
   Le dispatch AVX2 de CAGOULE est initialisé UNE SEULE FOIS via un flag C
@@ -10,6 +10,11 @@ SOLUTION : mesure scalaire via subprocess isolé.
   CAGOULE_FORCE_SCALAR=1 est positionné AVANT tout import cagoule dans le
   subprocess → dispatch initialisé en mode scalaire dès le premier appel.
   L'env du processus parent n'est jamais modifié.
+
+Nouveautés v2.1.0 (CAGOULE v2.3.0) :
+  - Utilise get_backend_info_v230() pour exposer 'sbox_backend' (avx2|scalar)
+  - CAGOULE_V23 flag détectant la présence de la nouvelle API
+  - DESCRIPTION mise à jour
 """
 
 from __future__ import annotations
@@ -24,16 +29,30 @@ from bench.suites.base import BaseSuite, BenchmarkResult
 
 # BUG3 FIX: CAGOULE_AVAILABLE défini AVANT la classe (plus d'assignation fantôme en bas de fichier)
 CAGOULE_V22 = False
+CAGOULE_V23 = False   # v2.3.0 : get_backend_info_v230() + sbox_backend
 CAGOULE_AVAILABLE = False
 CAGOULE_PARAMS = False
 cagoule_backend_info: dict = {}
 
 try:
-    from cagoule import backend_info as _cag_backend
     from cagoule import encrypt as cagoule_encrypt
 
-    cagoule_backend_info = _cag_backend
-    CAGOULE_V22 = True
+    # v2.2.0 API : backend_info dict (matrix_backend, omega_backend)
+    try:
+        from cagoule import backend_info as _cag_backend
+        cagoule_backend_info = _cag_backend
+        CAGOULE_V22 = True
+    except ImportError:
+        cagoule_backend_info = {"matrix_backend": "unknown", "omega_backend": "unknown"}
+
+    # v2.3.0 API : get_backend_info_v230() ajoute sbox_backend
+    try:
+        from cagoule._binding import get_backend_info_v230 as _get_v230
+        cagoule_backend_info = _get_v230()
+        CAGOULE_V23 = True
+    except (ImportError, Exception):
+        pass
+
     CAGOULE_AVAILABLE = True
 except ImportError:
 
@@ -172,7 +191,7 @@ def _run_scalar_subprocess(size: int, iterations: int, warmup: int, salt: bytes)
 
 class AVX2Suite(BaseSuite):
     NAME = "avx2"
-    DESCRIPTION = "CAGOULE v2.2.0 — AVX2 vs scalaire (subprocess isolé), delta Vandermonde"
+    DESCRIPTION = "CAGOULE v2.3.0 — AVX2 vs scalaire (subprocess isolé), S-box Feistel + Vandermonde"
 
     def __init__(self, iterations: int = 200, warmup: int = 10, sizes: list[int] | None = None):
         super().__init__(iterations=iterations, warmup=warmup)
@@ -248,7 +267,9 @@ class AVX2Suite(BaseSuite):
                         "backend": "avx2" if is_avx2_active else "scalar_runtime",
                         "avx2_available": is_avx2_active,
                         "matrix_backend": backend.get("matrix_backend"),
+                        "sbox_backend": backend.get("sbox_backend", "unknown"),
                         "omega_backend": backend.get("omega_backend"),
+                        "cagoule_v23": CAGOULE_V23,
                         "forced_scalar": False,
                         "size_label": size_label,
                         "measurement_method": "in_process",
@@ -304,7 +325,9 @@ class AVX2Suite(BaseSuite):
                         "backend": scalar.get("backend", "scalar_forced_subprocess"),
                         "avx2_available": is_avx2_active,
                         "matrix_backend": "scalar",
+                        "sbox_backend": "scalar",
                         "omega_backend": backend.get("omega_backend"),
+                        "cagoule_v23": CAGOULE_V23,
                         "forced_scalar": True,
                         "size_label": size_label,
                         "measurement_method": "subprocess_isolated",

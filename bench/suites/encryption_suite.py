@@ -21,24 +21,31 @@ BENCHMARK_SALT = b"\xca\xf0" * 16  # 32 octets fixes, reproductible
 
 CAGOULE_AVAILABLE = False
 CAGOULE_V22 = False  # AVX2 + DiffusionMatrixC.free() + backend_info
+CAGOULE_V23 = False  # S-box AVX2 + get_backend_info_v230() + sbox_backend
 CAGOULE_PARAMS = False
 CAGOULE_BACKEND: dict = {}
 
 try:
     from cagoule import encrypt as cagoule_encrypt
 
-    # v2.2.0: backend_info dict exposing matrix/omega backend
+    # v2.2.0 API
     try:
         from cagoule import backend_info as _cagoule_backend_info
-
         CAGOULE_BACKEND = _cagoule_backend_info
         CAGOULE_V22 = True
     except ImportError:
         CAGOULE_BACKEND = {"matrix_backend": "unknown", "omega_backend": "unknown"}
 
+    # v2.3.0 API — get_backend_info_v230() ajoute sbox_backend
+    try:
+        from cagoule._binding import get_backend_info_v230 as _get_v230
+        CAGOULE_BACKEND = _get_v230()
+        CAGOULE_V23 = True
+    except (ImportError, Exception):
+        pass
+
     try:
         from cagoule.params import CagouleParams
-
         CAGOULE_PARAMS = True
     except ImportError:
         pass
@@ -232,7 +239,9 @@ class EncryptionSuite(BaseSuite):
                 extra={
                     "cagoule_available": CAGOULE_AVAILABLE,
                     "cagoule_v22": CAGOULE_V22,
+                    "cagoule_v23": CAGOULE_V23,
                     "matrix_backend": CAGOULE_BACKEND.get("matrix_backend", "mock"),
+                    "sbox_backend": CAGOULE_BACKEND.get("sbox_backend", "unknown"),
                     "omega_backend": CAGOULE_BACKEND.get("omega_backend", "mock"),
                     "params_precomputed": self._cagoule_params is not None,
                     "arch": self._arch,
