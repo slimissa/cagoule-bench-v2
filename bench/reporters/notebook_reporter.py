@@ -253,7 +253,7 @@ else:
     size_label = f"{int(chosen_kb)}KB" if chosen_kb < 1024 else f"{int(chosen_kb//1024)}MB"
     ax.set_title(f"Distribution de latence — {size_label}", fontweight='bold')
     ax.set_xticks(x + width)
-    ax.set_xticklabels([a.replace('-', '-\n') for a in algos], fontsize=8)
+    ax.set_xticklabels([a.replace('-', '-\\n') for a in algos], fontsize=8)
     ax.legend()
     plt.tight_layout()
     plt.savefig("chart_latency.png", dpi=150, bbox_inches='tight')
@@ -429,71 +429,21 @@ else:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _build_notebook(results: list[BenchmarkResult]) -> "nbformat.NotebookNode":
+    # Merge all charts into one cell for reliable pre-execution
+    all_charts = (
+        _cell_imports_and_data(results) + "\n\n" +
+        _cell_chart_throughput_comparison() + "\n\n" +
+        _cell_chart_latency_distribution() + "\n\n" +
+        _cell_chart_ctr_vs_cbc() + "\n\n" +
+        _cell_chart_scaling() + "\n\n" +
+        _cell_chart_ct_overhead() + "\n\n" +
+        _cell_chart_mersenne_heatmap() + "\n\n" +
+        _cell_summary(results)
+    )
+
     cells = [
-        # ── Header ──
         new_markdown_cell(_cell_md_header(results)),
-
-        # ── Setup + données ──
-        new_markdown_cell(_cell_md_section(
-            "1. Setup & Données",
-            "Import des bibliothèques et injection des données brutes de cagoule-bench."
-        )),
-        new_code_cell(_cell_imports_and_data(results)),
-
-        # ── Throughput global ──
-        new_markdown_cell(_cell_md_section(
-            "2. Débit de chiffrement — comparaison globale",
-            "MB/s par algorithme et taille de message. Les barres CAGOULE-CTR "
-            "doivent dépasser 15 MB/s (cible roadmap v3.0.0)."
-        )),
-        new_code_cell(_cell_chart_throughput_comparison()),
-
-        # ── Latence ──
-        new_markdown_cell(_cell_md_section(
-            "3. Distribution de latence (p50 / p95 / p99)",
-            "Percentiles de latence pour identifier la stabilité du runtime. "
-            "Un CV% < 5% indique un runtime prévisible."
-        )),
-        new_code_cell(_cell_chart_latency_distribution()),
-
-        # ── CTR vs CBC ──
-        new_markdown_cell(_cell_md_section(
-            "4. CTR vs CBC — gain v3.0.0",
-            "Débit absolu et facteur d'accélération CTR/CBC par taille. "
-            "Le speedup ×3 sur 1MB est la signature du mode CTR sans dépendance inter-bloc."
-        )),
-        new_code_cell(_cell_chart_ctr_vs_cbc()),
-
-        # ── Scaling ──
-        new_markdown_cell(_cell_md_section(
-            "5. Scaling parallèle — courbe Amdahl empirique",
-            "Débit agrégé en fonction du nombre de workers ProcessPool. "
-            "Cible : >80 MB/s à 20 cœurs avec encrypt_bulk_ctr."
-        )),
-        new_code_cell(_cell_chart_scaling()),
-
-        # ── Overhead CT ──
-        new_markdown_cell(_cell_md_section(
-            "6. Overhead ciphertext : CTR (zéro padding) vs CBC (PKCS7)",
-            "CTR produit |CT| == |PT| + header + tag. "
-            "CBC ajoute jusqu'à 16 octets de padding PKCS7 + header + tag × expansion_factor."
-        )),
-        new_code_cell(_cell_chart_ct_overhead()),
-
-        # ── Heatmap Mersenne ──
-        new_markdown_cell(_cell_md_section(
-            "7. Heatmap primes Mersenne-64 (suite avx2)",
-            "Débit par prime du pool Mersenne-64 × taille de message. "
-            "Valide que les 8 primes ont des performances homogènes."
-        )),
-        new_code_cell(_cell_chart_mersenne_heatmap()),
-
-        # ── Conclusions ──
-        new_markdown_cell(_cell_md_section(
-            "8. Conclusions",
-            "Résumé automatique calculé depuis les données de ce run."
-        )),
-        new_code_cell(_cell_summary(results)),
+        new_code_cell(all_charts),
     ]
 
     nb = new_notebook(cells=cells)

@@ -32,6 +32,11 @@ dev = [
 ]
 notebook = [
     "nbformat>=5.9",
+    "nbconvert>=7.0",
+    "matplotlib>=3.7",
+    "seaborn>=0.12",
+    "pandas>=2.0",
+    "ipykernel>=6.0",
 ]
 
 [project.scripts]
