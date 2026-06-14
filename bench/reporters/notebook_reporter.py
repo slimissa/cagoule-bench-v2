@@ -398,7 +398,7 @@ summary = {{
     "ctr_peak_mbps":      {round(ctr_best, 2)},
     "cbc_peak_mbps":      {round(cbc_best, 2)},
     "ctr_vs_cbc_ratio":   "{ratio}",
-    "ctr_target_15mbps":  {str(ctr_best >= 15.0)},
+    "ctr_target_15mbps":  {ctr_best >= 15.0},
 }}
 
 print("=" * 55)
