@@ -97,10 +97,10 @@ def main():
     "-f",
     "formats",
     multiple=True,
-    type=click.Choice(["console", "json", "csv", "md", "html"], case_sensitive=False),
+    type=click.Choice(["console", "json", "csv", "md", "html", "notebook"], case_sensitive=False),
     default=("console",),
     show_default=True,
-    help="Format(s) de sortie (répétable).",
+    help="Format(s) de sortie (répétable). notebook = .ipynb pré-exécuté (requiert cagoule-bench[notebook]).",
 )
 @click.option(
     "--output",
@@ -143,6 +143,12 @@ def main():
     help="Fichier cagoule_bench.toml explicite.",
 )
 @click.option(
+    "--no-execute",
+    is_flag=True,
+    default=False,
+    help="Format notebook : génère le .ipynb sans pré-exécution (Option A, plus rapide).",
+)
+@click.option(
     "--no-db-regression",
     is_flag=True,
     default=False,
@@ -163,6 +169,7 @@ def run(
     threshold,
     config,
     no_db_regression,
+    no_execute,
 ):
     """Lance les benchmarks et génère les rapports."""
 
@@ -198,6 +205,8 @@ def run(
             tag=tag,
         )
         results = orch.run()
+        if no_execute:
+            orch._notebook_no_execute = True
         orch.report(results, formats=final_formats, output_dir=output)
 
         # BUG3 FIX: vérification régression DB AVANT save_history
