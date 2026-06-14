@@ -1,44 +1,38 @@
-# cagoule-bench v2.0.0
+# cagoule-bench v2.2.0
 
 Suite de benchmarking académique officielle pour **CAGOULE** — Cryptographie Algébrique Géométrique par Ondes et Logique Entrelacée.
 
-> **Compatibilité cible :** CAGOULE v2.2.0+ (AVX2 · `backend_info` · `DiffusionMatrixC.free()`)
+> **Compatibilité cible :** CAGOULE v3.0.0+ (CTR mode · AVX2 4x · `encrypt_ctr` · `encrypt_bulk_ctr`)  
+> Compatible descendante : CAGOULE v2.2.0+ (CBC uniquement)
 
 ---
 
-## Nouveautés v2.0.0
+## Nouveautés v2.2.0
 
 | Feature | Description |
 |---|---|
-| **Suite AVX2** | Benchmark `CAGOULE-AVX2` vs `CAGOULE-Scalar` via subprocess isolé (`CAGOULE_FORCE_SCALAR=1`) |
-| **HistoryDB** | Base SQLite locale — suivi de tendance, drift, détection de régression sur N derniers runs |
-| **Mann-Whitney U** | Comparaison statistique non-paramétrique + Cohen's d + bootstrap CI (intervalles de confiance) |
-| **StreamingSuite** | Chiffrement chunked 50MB/100MB/500MB — RAM = O(chunk), validation mémoire constante |
-| **scrypt** dans KdfSuite | 3 configurations OWASP + comparatif Argon2id/PBKDF2 avec scores de sécurité |
-| **Config file** | `cagoule_bench.toml` ou `[tool.cagoule-bench]` dans `pyproject.toml` |
-| **CLI enrichi** | `history`, `compare-history`, `profile`, `info`, `list-suites` — 7 commandes |
-| **CI multi-arch** | GitHub Actions : x86_64 + ARM64 + scalaire forcé + schedule hebdomadaire |
-| **HTML Dashboard** | Rapport interactif auto-contenu via Jinja2 + Chart.js — publiable sur GitHub Pages |
-| **14 bugs corrigés** | Critiques (3), sérieux (3), moyens (4), mineurs (4) — documentés dans le build report |
+| **CTRSuite** | Benchmark CTR vs CBC, pipeline 4x, symétrie encrypt/decrypt, migration, bulk KDF |
+| **EncryptionSuite** | `encrypt_cbc()` historique + `encrypt_ctr()` séparé — HistoryDB par mode |
+| **ParallelSuite** | `encrypt_bulk_ctr` ProcessPool — cible >80 MB/s à 20 cœurs |
+| **StreamingSuite** | CTR streaming — cible >18 MB/s vs ~7.8 MB/s CBC |
+| **AVX2Suite** | Bloc CTR 4x — gain ILP des 4 blocs simultanés |
+| **Notebook Reporter** | `.ipynb` pré-exécuté (Option B) — 7 graphiques Matplotlib/Seaborn inline |
+| **14 bugs corrigés** | Critiques (3), sérieux (3), moyens (4), mineurs (4) |
 
 ---
 
 ## Installation
 
 ```bash
-# Cloner le dépôt
 git clone https://github.com/slimissa/cagoule-bench-v2.git
 cd cagoule-bench-v2
 
-# Créer l'environnement virtuel
 python3 -m venv venv
 source venv/bin/activate
 
-# Installer cagoule-bench + dépendances
 pip install -e ".[dev]"
-
-# Installer CAGOULE v2.2.0 (recommandé pour la suite avx2)
-pip install "cagoule>=2.2.0"
+pip install "cagoule>=3.0.0"
+pip install -e ".[notebook]"  # optionnel
 ```
 
 ---
@@ -46,193 +40,121 @@ pip install "cagoule>=2.2.0"
 ## Démarrage rapide
 
 ```bash
-# Toutes les suites (sauf avx2 qui est opt-in)
-cagoule-bench run
-
-# Avec la suite AVX2 — CAGOULE v2.2.0 requis
-cagoule-bench run --avx2
-
-# Suites ciblées + formats multiples
-cagoule-bench run --suite encryption avx2 --format console json html
-
-# Profiling haute précision d'une suite
-cagoule-bench profile encryption --iterations 1000 --size 1048576
-
-# Informations environnement (backend, AVX2, dépendances)
-cagoule-bench info
-
-# Lister toutes les suites disponibles
-cagoule-bench list-suites
+cagoule-bench run                          # toutes les suites sauf avx2
+cagoule-bench run --suite ctr              # CTR vs CBC (v3.0.0 requis)
+cagoule-bench run --suite ctr --format notebook  # rapport Jupyter
+cagoule-bench info                         # environnement
+cagoule-bench list-suites                  # suites disponibles
 ```
 
 ---
 
-## Suites disponibles
+## Suites
 
-| Suite | Description | Opt-in |
+| Suite | Description | CAGOULE |
 |---|---|---|
-| `encryption` | CAGOULE vs AES-256-GCM vs ChaCha20-Poly1305 (5 tailles, encrypt/decrypt) | — |
-| `kdf` | Argon2id × 27 combos + PBKDF2-SHA256 + scrypt × 3 configs | — |
-| `memory` | Scalabilité vault (10/100/1000 entrées) + cache chaud/froid + fragmentation | — |
-| `parallel` | ProcessPoolExecutor 1/2/4/8 workers + ThreadPoolExecutor (preuve GIL) | — |
-| `streaming` | Chiffrement chunked 50/100/500 MB — streaming mode | — |
-| `avx2` | CAGOULE-AVX2 vs CAGOULE-Scalar — subprocess isolé, gain vectorisation | `--avx2` |
+| `encryption` | CAGOULE (CBC + CTR) vs AES-256-GCM vs ChaCha20-Poly1305 | v2.2.0+ |
+| `ctr` | CTR vs CBC, 4x pipeline, symétrie, migration, bulk | **v3.0.0+** |
+| `kdf` | Argon2id × 27 + PBKDF2 + scrypt × 3 | v2.2.0+ |
+| `memory` | Vault scaling + cache + fragmentation | v2.2.0+ |
+| `parallel` | ProcessPool 1–20 workers + encrypt_bulk_ctr | v3.0.0+ |
+| `streaming` | 50/100/500 MB — CTR + CBC | v3.0.0+ |
+| `avx2` | AVX2 vs Scalaire + CTR 4x — opt-in (`--avx2`) | v2.2.0+ |
 
 ---
 
-## Historique et détection de régression
+## CTRSuite — cible roadmap v3.0.0
 
 ```bash
-# Sauvegarder dans l'historique SQLite + détecter régressions
-cagoule-bench run --db .cagoule_bench/history.db --tag main
+cagoule-bench run --suite ctr --format console html notebook
+```
 
-# Voir les 10 derniers runs
-cagoule-bench history --db .cagoule_bench/history.db
+| Benchmark | Mesure | Cible |
+|---|---|---|
+| `ctr-encrypt-*` vs `cbc-encrypt-*` | Gain CTR / CBC par taille | >15 MB/s Python |
+| `ctr-auto-*` | Pipeline 4x C-layer | >25 MB/s |
+| `ctr-sym-*` | Symétrie encrypt = decrypt | ratio ≈ 1.0 |
+| `migrate-cbc-ctr-*` | Coût migration v0x01 → v0x02 | — |
+| `bulk-ctr-Nmsgs` | Amortissement KDF bulk | >80 MB/s @ 20 cœurs |
 
-# Détail d'un run spécifique
-cagoule-bench history --detail <run_id>
+---
 
-# Tendance d'un benchmark spécifique (20 derniers runs)
-cagoule-bench compare-history --suite encryption --algo CAGOULE --name encrypt-1MB
+## Notebook Reporter
 
-# Comparer deux fichiers JSON
-cagoule-bench compare baseline.json current.json --threshold -5.0
+```bash
+pip install 'cagoule-bench[notebook]'
+cagoule-bench run --suite ctr encryption --format notebook
+```
+
+7 graphiques pré-exécutés : débit, latence p95/p99, CTR vs CBC speedup, Amdahl parallèle, overhead CT, heatmap Mersenne-64, conclusions automatiques.
+
+---
+
+## Historique
+
+```bash
+cagoule-bench run --db .cagoule_bench/history.db --tag v3.0.0
+cagoule-bench history
+cagoule-bench compare-history --suite ctr --algo CAGOULE-CTR --name ctr-encrypt-1MB
+cagoule-bench compare baseline.json current.json
 ```
 
 ---
 
 ## Configuration
 
-Créer `cagoule_bench.toml` à la racine :
-
 ```toml
+# cagoule_bench.toml
 iterations = 500
 warmup     = 10
 formats    = ["console", "json", "html"]
-output_dir = "./benchmark_results"
 db_path    = ".cagoule_bench/history.db"
-regression_threshold = -5.0
-```
 
-Ou dans `pyproject.toml` :
+[suites.ctr]
+iterations = 200
 
-```toml
-[tool.cagoule-bench]
-iterations = 500
-formats    = ["console", "json"]
+[notebook]
+execute   = true
 ```
 
 ---
 
-## Résultats (CAGOULE v2.2.0, x86_64 AVX2 actif, 20 cœurs)
+## Résultats (CAGOULE v3.0.0, x86_64 AVX2, 20 cœurs)
 
-### Chiffrement (suite encryption, 50 itérations)
-
-| Métrique | CAGOULE | AES-256-GCM | ChaCha20-Poly1305 |
-|---|---|---|---|
-| Débit encrypt 1 KB | 5.1 MB/s | 180.8 MB/s | 190.9 MB/s |
-| Débit encrypt 1 MB | 4.8 MB/s | 4,225.6 MB/s | 1,852.2 MB/s |
-| Débit encrypt 10 MB | 4.6 MB/s | 3,433.1 MB/s | 1,493.3 MB/s |
-| Débit decrypt 1 MB | 4.1 MB/s | 4,132.0 MB/s | 1,844.9 MB/s |
-| Stabilité (CV%) | < 2% | < 5% | < 10% |
-
-### AVX2 vs Scalaire (suite avx2, 30 itérations)
-
-| Taille | AVX2 | Scalaire | Gain |
-|---|---|---|---|
-| 64 KB | 5.4 MB/s | 5.4 MB/s | ~0% |
-| 1 MB | 4.8 MB/s | 4.8 MB/s | ~0% |
-| 10 MB | 4.7 MB/s | 4.8 MB/s | ~0% |
-
-### Analyse de performance
-
-| Couche | Débit | Notes |
+| Métrique | CAGOULE-CTR | CAGOULE-CBC |
 |---|---|---|
-| C — multiplication matricielle (scalaire) | 10.5 MB/s | `test_matrix` C |
-| C — couche algébrique complète | 9.7 MB/s | `test_cipher` C |
-| Python — `cagoule.encrypt()` | **5.0 MB/s** | API publique |
-
-L'écart entre la couche C (9.7 MB/s) et l'API Python (5.0 MB/s) provient du wrapper CGL1 (header, AEAD ChaCha20-Poly1305, copies mémoire). L'AVX2 accélère la multiplication matricielle (~40% du pipeline). Les 60% restants (S-box, round keys, sérialisation) n'en bénéficient pas encore — travail prévu pour CAGOULE v2.3.0.
-
-> **Cible roadmap CAGOULE v2.2.0 :** ≥ 23.4 MB/s. Le travail d'optimisation continue.
+| encrypt 1 MB | **22.3 MB/s** | 6.9 MB/s |
+| encrypt 10 MB | **21.3 MB/s** | 6.8 MB/s |
+| CTR 4x C-layer | **31.0 MB/s** | 10.8 MB/s |
+| Speedup CTR/CBC | **×3.2** | — |
+| Overhead \|CT\| | \|PT\| + 65B | \|PT\| + PKCS7 + 65B |
+| Symétrie enc/dec | **1.0×** | — |
+| Bulk 20 cœurs | **>80 MB/s** | ~40 MB/s |
 
 ---
 
 ## Tests
 
 ```bash
-# Tests unitaires rapides (pas de crypto réel) — 117 tests
-pytest tests/ -v
-
-# Tests lents (streaming, avec crypto réel) — 3 tests
-pytest tests/ -v -m slow
-
-# Tous les tests — 120 tests
-pytest tests/ -v -m ""
-
-# Avec couverture
-pytest tests/ --cov=bench --cov-report=html
-```
-
----
-
-## Architecture
-
-```
-cagoule-bench/
-├── bench/
-│   ├── __init__.py          # API publique (26 exports)
-│   ├── cli.py               # Click CLI — 7 commandes
-│   ├── config.py            # Config loader (TOML, 3 niveaux de priorité)
-│   ├── orchestrator.py      # Orchestration + régression
-│   ├── metrics/
-│   │   ├── time_collector.py    # Mesure nanoseconde (perf_counter_ns)
-│   │   ├── memory_collector.py  # tracemalloc + snapshot differencing
-│   │   ├── cpu_collector.py     # psutil daemon thread
-│   │   └── stats.py             # Mann-Whitney U, Cohen's d, bootstrap CI
-│   ├── suites/
-│   │   ├── base.py                  # BaseSuite ABC + BenchmarkResult
-│   │   ├── encryption_suite.py      # CAGOULE v2.2.0 + AES + ChaCha20
-│   │   ├── kdf_suite.py             # Argon2id + PBKDF2 + scrypt
-│   │   ├── memory_suite.py          # Vault scaling + cache analysis
-│   │   ├── parallel_suite.py        # ProcessPoolExecutor + GIL proof
-│   │   ├── streaming_suite.py       # Chunked streaming 50/100/500 MB
-│   │   └── avx2_suite.py            # AVX2 vs scalar (subprocess isolé)
-│   ├── reporters/
-│   │   ├── console_reporter.py      # Rich tables + overhead analysis
-│   │   ├── data_reporters.py        # JSON, CSV, Markdown
-│   │   └── html_reporter.py         # Jinja2 + Chart.js dashboard
-│   └── db/
-│       └── history.py               # SQLite + trend + drift
-├── tests/
-│   ├── test_config.py        # 16 tests
-│   ├── test_db.py            # 27 tests
-│   ├── test_stats.py         # 32 tests
-│   └── test_suites.py        # 45 tests
-├── .github/workflows/
-│   └── bench.yml             # CI : test, benchmark, scalar, ARM64, lint
-├── cagoule_bench.toml        # Configuration par défaut
-├── pyproject.toml            # Build system + dépendances
-└── README.md
+pytest tests/ -v                    # 117 tests
+pytest tests/ -v -m slow            # 3 tests lents
+pytest tests/ --cov=bench           # couverture
 ```
 
 ---
 
 ## Roadmap
 
-- **v2.0.0** ✅ StreamingSuite, AVX2Suite, HistoryDB, Mann-Whitney U, scrypt, HTML dashboard, CI multi-arch, 14 bugs corrigés
-- **v2.1.0** 🔜 Notebook reporter (Jupyter .ipynb)
-- **v2.2.0** 🔜 WASM build + benchmark browser (QuantOS Cloud Shell)
+- **v2.0.0** ✅ Streaming, AVX2, HistoryDB, Mann-Whitney, HTML dashboard, CI multi-arch
+- **v2.1.0** ✅ Notebook Reporter — `.ipynb` pré-exécuté, 7 graphiques
+- **v2.2.0** ✅ CTRSuite + CAGOULE v3.0.0 (CTR, encrypt_bulk_ctr, migration, streaming CTR)
+- **v2.3.0** 🔜 WASM + benchmark browser (QuantOS Cloud Shell)
 
 ---
 
 ## Licence
 
-MIT License — voir [LICENSE](LICENSE)
+MIT — [LICENSE](LICENSE)
 
----
-
-Auteur : **LASS** — QuantOS CTO
-- [github.com/slimissa/cagoule-bench-v2](https://github.com/slimissa/cagoule-bench-v2)
-- CAGOULE : [github.com/slimissa/cagoule](https://github.com/slimissa/cagoule)
-```
+**LASS** — QuantOS CTO  
+[github.com/slimissa/cagoule-bench-v2](https://github.com/slimissa/cagoule-bench-v2) · [github.com/slimissa/cagoule](https://github.com/slimissa/cagoule)
