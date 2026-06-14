@@ -1,7 +1,8 @@
 """
-ConsoleReporter v2.0 — affichage rich dans le terminal.
+ConsoleReporter v2.2 — affichage rich dans le terminal.
 
-Nouveautés v2.0 :
+Nouveautés v2.2 :
+  - Suite CTR : tableaux CTR vs CBC, symétrie, migration, bulk KDF
   - Header enrichi : backend CAGOULE (avx2/scalar), backend omega
   - Suite AVX2 : tableau comparatif AVX2 vs scalaire + gain %
   - Suite KDF : colonne scrypt ajoutée
@@ -48,13 +49,12 @@ class ConsoleReporter:
         matrix_backend, omega_backend = _detect_cagoule_backend(results)
         backend_color = "green" if matrix_backend == "avx2" else "yellow"
 
-        # ── Header ────────────────────────────────────────────────────
         console.print()
         console.print(
             Panel(
                 Text.assemble(
                     ("cagoule-bench ", "bold cyan"),
-                    ("v2.0.0", "bold white"),
+                    ("v2.2.0", "bold white"),
                     ("  |  ", "dim"),
                     (platform.machine(), "yellow"),
                     ("  |  ", "dim"),
@@ -67,7 +67,7 @@ class ConsoleReporter:
                     ("  |  ", "dim"),
                     (time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()), "dim"),
                 ),
-                title="[bold blue]CAGOULE-BENCH v2.0.0[/bold blue]",
+                title="[bold blue]CAGOULE-BENCH v2.2.0[/bold blue]",
                 border_style="blue",
             )
         )
@@ -88,6 +88,7 @@ class ConsoleReporter:
 
         dispatch = {
             "encryption": self._render_encryption,
+            "ctr": self._render_ctr,
             "kdf": self._render_kdf,
             "memory": self._render_memory,
             "parallel": self._render_parallel,
@@ -110,7 +111,7 @@ class ConsoleReporter:
         t.add_column("Mem Peak", justify="right", style="yellow")
 
         for r in results:
-            alg_style = "bold green" if r.algorithm == "CAGOULE" else "white"
+            alg_style = "bold green" if "CAGOULE" in r.algorithm else "white"
             cv_color = "green" if r.cv_percent < 5 else ("yellow" if r.cv_percent < 10 else "red")
             t.add_row(
                 r.name,
@@ -124,7 +125,6 @@ class ConsoleReporter:
             )
         console.print(t)
 
-        # Overhead analysis
         by_test: dict[str, dict] = {}
         for r in results:
             if r.throughput_mbps > 0:
@@ -137,11 +137,140 @@ class ConsoleReporter:
         ot.add_column("vs ChaCha20-Poly1305", justify="right")
 
         for name, algos in sorted(by_test.items()):
-            cag = algos.get("CAGOULE", 0)
+            cag = algos.get("CAGOULE", algos.get("CAGOULE-CBC", algos.get("CAGOULE-CTR", 0)))
             aes = algos.get("AES-256-GCM", 0)
             cha = algos.get("ChaCha20-Poly1305", 0)
             ot.add_row(name, _overhead_str(cag, aes), _overhead_str(cag, cha))
         console.print(ot)
+
+    # ── CTR (v2.2 new) ────────────────────────────────────────────────────────
+
+    def _render_ctr(self, results: list[BenchmarkResult]) -> None:
+        # ── Section 1: CTR vs CBC ──────────────────────────────────────
+        ctr_vs = [r for r in results if "ctr-encrypt" in r.name or "cbc-encrypt" in r.name]
+        if ctr_vs:
+            console.print("\n[bold green]CTR vs CBC — Throughput Comparison[/bold green]")
+            t = Table(box=box.ROUNDED, border_style="green", header_style="bold green on black")
+            t.add_column("Size", style="white")
+            t.add_column("CTR (MB/s)", justify="right", style="bold green")
+            t.add_column("CBC (MB/s)", justify="right", style="blue")
+            t.add_column("Speedup", justify="right", style="cyan")
+            t.add_column("CTR ms", justify="right", style="dim")
+
+            cbc_by_name = {}
+            ctr_by_name = {}
+            for r in ctr_vs:
+                if "ctr-encrypt" in r.name:
+                    ctr_by_name[r.name.replace("ctr-encrypt-", "")] = r
+                elif "cbc-encrypt" in r.name:
+                    cbc_by_name[r.name.replace("cbc-encrypt-", "")] = r
+
+            for size_label in sorted(ctr_by_name.keys()):
+                r_ctr = ctr_by_name.get(size_label)
+                r_cbc = cbc_by_name.get(size_label)
+                if r_ctr and r_cbc:
+                    speedup = r_ctr.throughput_mbps / r_cbc.throughput_mbps if r_cbc.throughput_mbps > 0 else 1.0
+                    spd_c = "green" if speedup >= 3.0 else ("yellow" if speedup >= 1.5 else "red")
+                    t.add_row(
+                        size_label,
+                        f"{r_ctr.throughput_mbps:.1f}",
+                        f"{r_cbc.throughput_mbps:.1f}",
+                        f"[{spd_c}]×{speedup:.1f}[/{spd_c}]",
+                        f"{r_ctr.mean_ms:.2f}",
+                    )
+            console.print(t)
+            console.print("[dim]CTR target: >15 MB/s Python e2e[/dim]")
+
+        # ── Section 2: 4x Pipeline ─────────────────────────────────────
+        auto = [r for r in results if "ctr-auto" in r.name]
+        if auto:
+            console.print("\n[bold cyan]CTR Pipeline 4x — Auto-dispatch[/bold cyan]")
+            t2 = Table(box=box.SIMPLE, border_style="dim")
+            t2.add_column("Size")
+            t2.add_column("Throughput", justify="right")
+            t2.add_column("Mean (ms)", justify="right")
+            for r in sorted(auto, key=lambda x: x.data_size_bytes):
+                above = r.extra.get("above_4x_threshold", False)
+                label = f"{r.name.replace('ctr-auto-', '')} {'[green]4x[/green]' if above else '[dim]1x[/dim]'}"
+                t2.add_row(label, f"{r.throughput_mbps:.1f} MB/s", f"{r.mean_ms:.2f}")
+            console.print(t2)
+            console.print("[dim]4x pipeline activates for messages ≥ 128 bytes (8 blocks)[/dim]")
+
+        # ── Section 3: Symmetry ─────────────────────────────────────────
+        sym = [r for r in results if "sym-encrypt" in r.name or "sym-decrypt" in r.name]
+        if sym:
+            console.print("\n[bold cyan]CTR Symmetry — encrypt = decrypt[/bold cyan]")
+            t3 = Table(box=box.SIMPLE, border_style="dim")
+            t3.add_column("Size")
+            t3.add_column("Encrypt (MB/s)", justify="right")
+            t3.add_column("Decrypt (MB/s)", justify="right")
+            t3.add_column("Ratio", justify="right")
+            for r in sym:
+                if "encrypt" in r.name:
+                    ratio = r.extra.get("symmetry_ratio_dec_enc", 0)
+                    ratio_c = "green" if 0.95 <= ratio <= 1.05 else "red"
+                    dec = next((x for x in sym if x.name == r.name.replace("encrypt", "decrypt")), None)
+                    if dec:
+                        t3.add_row(
+                            r.name.replace("ctr-sym-encrypt-", ""),
+                            f"{r.throughput_mbps:.1f}",
+                            f"{dec.throughput_mbps:.1f}",
+                            f"[{ratio_c}]{ratio:.2f}×[/{ratio_c}]",
+                        )
+            console.print(t3)
+
+        # ── Section 4: Migration ────────────────────────────────────────
+        mig = [r for r in results if "migrate" in r.name]
+        if mig:
+            console.print("\n[bold yellow]CBC → CTR Migration Cost[/bold yellow]")
+            t4 = Table(box=box.SIMPLE, border_style="dim")
+            t4.add_column("Size")
+            t4.add_column("Time (ms)", justify="right")
+            t4.add_column("Throughput", justify="right")
+            for r in mig:
+                t4.add_row(
+                    r.name.replace("migrate-cbc-ctr-", ""),
+                    f"{r.mean_ms:.1f}",
+                    f"{r.throughput_mbps:.1f} MB/s",
+                )
+            console.print(t4)
+
+        # ── Section 5: Bulk CTR ─────────────────────────────────────────
+        bulk = [r for r in results if "bulk-ctr" in r.name]
+        indiv = [r for r in results if "individual-ctr" in r.name]
+        if bulk and indiv:
+            console.print("\n[bold green]Bulk CTR — KDF Amortization[/bold green]")
+            t5 = Table(box=box.ROUNDED, border_style="green", header_style="bold green on black")
+            t5.add_column("Messages", justify="right")
+            t5.add_column("Bulk (ms)", justify="right", style="green")
+            t5.add_column("Individual (ms)", justify="right", style="yellow")
+            t5.add_column("Gain", justify="right", style="cyan")
+            t5.add_column("KDF calls", justify="center", style="dim")
+
+            bulk_by_n = {}
+            for r in bulk:
+                n = r.extra.get("n_messages", 0)
+                bulk_by_n[n] = r
+            indiv_by_n = {}
+            for r in indiv:
+                n = r.extra.get("n_messages", 0)
+                indiv_by_n[n] = r
+
+            for n in sorted(bulk_by_n.keys()):
+                r_b = bulk_by_n.get(n)
+                r_i = indiv_by_n.get(n)
+                if r_b and r_i:
+                    gain = r_i.mean_ms / r_b.mean_ms if r_b.mean_ms > 0 else 1.0
+                    gain_c = "green" if gain > 1.0 else "dim"
+                    t5.add_row(
+                        str(n),
+                        f"{r_b.mean_ms:.1f}",
+                        f"{r_i.mean_ms:.1f}",
+                        f"[{gain_c}]{gain:.2f}×[/{gain_c}]",
+                        f"1 vs {n}",
+                    )
+            console.print(t5)
+            console.print("[dim]Bulk: 1 Argon2id derivation shared across N messages[/dim]")
 
     # ── KDF ───────────────────────────────────────────────────────────────────
 
@@ -370,7 +499,7 @@ class ConsoleReporter:
             avg_gain = sum(r_sc.extra.get("avx2_gain_pct", 0) for r_sc in scalar_results) / max(
                 len(scalar_results), 1
             )
-            target = 25.0  # v2.2.0 cible ≥25%
+            target = 25.0
             status_c = "green" if avg_gain >= target else ("yellow" if avg_gain >= 10 else "red")
             console.print(
                 f"\n  [bold]Gain moyen AVX2 :[/bold] [{status_c}]{avg_gain:.1f}%[/{status_c}]  "
