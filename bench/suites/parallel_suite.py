@@ -29,11 +29,19 @@ BENCHMARK_SALT = b"\xca\xf0" * 16  # 32 octets fixes, reproductible
 CAGOULE_AVAILABLE = False
 CAGOULE_PARAMS = None
 
+CAGOULE_V30 = False
 try:
     from cagoule import encrypt as cagoule_encrypt
+    from cagoule import encrypt_bulk_ctr
     from cagoule.params import CagouleParams
 
     CAGOULE_AVAILABLE = True
+    # v3.0.0 : CTR bulk disponible ?
+    try:
+        _test = encrypt_bulk_ctr([b"x"], b"test", fast_mode=True)
+        CAGOULE_V30 = True
+    except Exception:
+        pass
     # Pré-dérivation UNE SEULE FOIS dans le processus parent
     # Avec fork (Linux), les workers héritent de cette variable
     CAGOULE_PARAMS = CagouleParams.derive_for_benchmark(
@@ -289,6 +297,58 @@ class ParallelSuite(BaseSuite):
                     },
                 )
             )
+
+        # ── 4. CTR bulk ProcessPool (v3.0.0 target: >80 MB/s @ 20 cores) ──
+        if CAGOULE_V30:
+            for workers in [4, 8, 16, 20]:
+                if workers not in self.worker_counts:
+                    continue
+
+                batch_size = min(self.num_operations, 50)
+                messages_template = [TEST_DATA] * batch_size
+
+                def _bulk_ctr_parallel_op():
+                    from concurrent.futures import ProcessPoolExecutor
+                    def _worker(_):
+                        from cagoule import encrypt_bulk_ctr
+                        return encrypt_bulk_ctr(messages_template, PASSWORD, fast_mode=True)
+                    n_batches = max(1, self.num_operations // batch_size)
+                    start = time.perf_counter()
+                    with ProcessPoolExecutor(max_workers=workers) as ex:
+                        list(ex.map(_worker, range(n_batches)))
+                    return time.perf_counter() - start
+
+                try:
+                    bulk_timing = self._timer.measure(
+                        _bulk_ctr_parallel_op,
+                        iterations=max(2, self.iterations // 3),
+                        warmup=1,
+                        label=f"bulk-ctr-{workers}w",
+                    )
+                    total_mb = (self.num_operations * DATA_SIZE) / 1_048_576
+                    results.append(self._make_result(
+                        name=f"bulk-ctr-{self.num_operations}ops-{workers}workers",
+                        algorithm=f"CAGOULE-CTR-bulk-{workers}w",
+                        data_size_bytes=self.num_operations * DATA_SIZE,
+                        mean_ms=bulk_timing.mean_ms,
+                        stddev_ms=bulk_timing.stddev_ms,
+                        min_ms=bulk_timing.min_ms, max_ms=bulk_timing.max_ms,
+                        p95_ms=bulk_timing.p95_ms, p99_ms=bulk_timing.p99_ms,
+                        cv_percent=bulk_timing.cv_percent,
+                        throughput_mbps=total_mb / (bulk_timing.mean_ms / 1000),
+                        peak_mb=0.0, delta_mb=0.0,
+                        cpu_mean_pct=0.0, cpu_peak_pct=0.0,
+                        samples_ns=bulk_timing.samples_ns,
+                        extra={
+                            "workers": workers, "mode": "ctr_bulk",
+                            "batch_size": batch_size,
+                            "target_mbps": 80.0,
+                            "cagoule_v30": CAGOULE_V30,
+                            "note": "encrypt_bulk_ctr: 1 KDF per batch × N workers",
+                        },
+                    ))
+                except Exception:
+                    pass
 
         return results
 

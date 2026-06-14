@@ -13,7 +13,7 @@ Nouveautés v2.0 :
   - CAGOULE v2.1 API compatibility
 """
 
-__version__ = "2.0.0"
+__version__ = "2.2.0"
 
 from bench.db.history import HistoryDB, RunRecord
 from bench.metrics import CpuCollector, MemoryCollector, TimeCollector

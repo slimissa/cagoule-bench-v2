@@ -242,7 +242,7 @@ class ConsoleReporter:
             for r in vault:
                 ex = r.extra
                 t.add_row(
-                    f"{ex.get('entry_count'):,} entries",
+                    f"{ex.get('entry_count', 0):,} entries",
                     f"{r.peak_mb:.2f} MB",
                     f"{ex.get('mb_per_entry', 0):.5f}",
                     f"{r.mean_ms:.1f}",

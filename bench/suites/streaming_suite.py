@@ -36,14 +36,21 @@ CAGOULE_PARAMS = None
 BENCHMARK_SALT = b"\xca\xf0" * 16
 PASSWORD = b"cagoule-bench-v2-streaming-test"
 
+CAGOULE_V30 = False
 try:
     from cagoule import encrypt as cagoule_encrypt
+    from cagoule import encrypt_ctr as cagoule_encrypt_ctr
     from cagoule.params import CagouleParams
 
     CAGOULE_AVAILABLE = True
     CAGOULE_PARAMS = CagouleParams.derive_for_benchmark(
         PASSWORD, fast_mode=True, salt=BENCHMARK_SALT
     )
+    try:
+        _t = cagoule_encrypt_ctr(b"x", b"test", fast_mode=True)
+        CAGOULE_V30 = True
+    except Exception:
+        cagoule_encrypt_ctr = cagoule_encrypt
 except ImportError:
 
     def cagoule_encrypt(plaintext: bytes, password: bytes, **kwargs) -> bytes:
@@ -134,6 +141,29 @@ def _stream_cagoule_encrypt(data_size: int, chunk_size: int = CHUNK_SIZE) -> tup
     return time.perf_counter() - t0, total_out
 
 
+def _stream_cagoule_encrypt_ctr(data_size: int, chunk_size: int = CHUNK_SIZE) -> tuple[float, int]:
+    """
+    CAGOULE v3.0.0 CTR streaming encrypt.
+
+    Utilise CAGOULE_PARAMS pré-dérivés (même que CBC pour comparaison équitable).
+    CTR target: >18 MB/s streaming vs ~7.8 MB/s CBC (roadmap v3.0.0 §8).
+    """
+    t0 = time.perf_counter()
+    remaining = data_size
+    total_out = 0
+
+    while remaining > 0:
+        chunk = os.urandom(min(chunk_size, remaining))
+        if CAGOULE_AVAILABLE and CAGOULE_PARAMS is not None:
+            ct = cagoule_encrypt_ctr(chunk, PASSWORD, params=CAGOULE_PARAMS)
+        else:
+            ct = cagoule_encrypt_ctr(chunk, PASSWORD)
+        total_out += len(ct)
+        remaining -= len(chunk)
+
+    return time.perf_counter() - t0, total_out
+
+
 # ── Suite ─────────────────────────────────────────────────────────────────────
 
 
@@ -163,11 +193,15 @@ class StreamingSuite(BaseSuite):
         for size in self.sizes:
             size_label = f"{size // 1_048_576}MB"
 
-            for algo, stream_fn in [
-                ("AES-256-GCM", _stream_aes_encrypt),
-                ("ChaCha20-Poly1305", _stream_chacha_encrypt),
-                ("CAGOULE", _stream_cagoule_encrypt),
-            ]:
+            # Build algo list — add CTR if v3.0.0 available
+            algo_fns = [
+                ("AES-256-GCM",        _stream_aes_encrypt),
+                ("ChaCha20-Poly1305",  _stream_chacha_encrypt),
+                ("CAGOULE-CBC",        _stream_cagoule_encrypt),
+            ]
+            if CAGOULE_V30:
+                algo_fns.append(("CAGOULE-CTR", _stream_cagoule_encrypt_ctr))
+            for algo, stream_fn in algo_fns:
 
                 def _op(s=size, fn=stream_fn):
                     return fn(s, self.chunk_size)
@@ -217,7 +251,7 @@ class StreamingSuite(BaseSuite):
                             "ram_efficiency": (
                                 "O(chunk)" if mem.peak_mb < (size / 1_048_576 * 0.1) else "O(total)"
                             ),
-                            "cagoule_available": CAGOULE_AVAILABLE,
+                            "cagoule_available": CAGOULE_AVAILABLE, "cagoule_v30": CAGOULE_V30, "target_mbps_ctr": 18.0 if algo == "CAGOULE-CTR" else None,
                             "note_non_ce_generation": "Includes os.urandom(12) nonce generation per chunk — realistic streaming overhead",
                         },
                     )

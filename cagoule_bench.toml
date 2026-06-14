@@ -1,28 +1,88 @@
-# cagoule_bench.toml — Configuration cagoule-bench v2.0.0
-# Placer à la racine du projet ou dans le répertoire de travail.
-# Alternative : [tool.cagoule-bench] dans pyproject.toml
+# cagoule_bench.toml — Configuration cagoule-bench v2.2.0
+#
+# v2.2.0 : CTR suite, notebook reporter, CAGOULE v3.0.0 support
+#   - min_baseline_n = 5 : ignore les comparaisons si la baseline < 5 mesures
+#   - Suite CTR : benchmark complet CTR vs CBC, 4x pipeline, bulk, migration
+#   - Suite encryption : utilise encrypt_cbc() pour compatibilité historique
 
-# ── Paramètres d'exécution ───────────────────────────────────────────────────
-iterations = 500          # Itérations par benchmark (défaut: 500)
-warmup     = 10           # Warmup avant mesure (défaut: 10)
+[bench]
+version         = "2.2.0"
+output_format   = "console"
+output_file     = ""
+units           = "MB/s"
+warmup          = 3
+iterations      = 20
 
-# Suites à lancer par défaut (null = toutes sauf avx2 qui est opt-in)
-# suites = ["encryption", "kdf", "memory", "parallel"]
+[regression]
+# Seuil de régression en % (négatif = perte de perf)
+threshold_pct     = -5.0
+# NOUVEAU v2.4.0 : n minimum pour une comparaison baseline valide
+# Si la baseline a été mesurée avec N < min_baseline_n, la comparaison
+# est ignorée et marquée "baseline_insufficient" plutôt que "FAIL".
+# Élimine les faux positifs sur N=2 (AES-256-GCM, ChaCha20 petits messages).
+min_baseline_n    = 5
+warmup_excluded   = true             # warmup ignorés dans le décompte N
 
-# ── Formats de sortie ────────────────────────────────────────────────────────
-formats    = ["console", "json"]  # console, json, csv, md, html
-output_dir = "./benchmark_results"
+[suites.encryption]
+# Suite principale : chiffrement/déchiffrement à tailles variées
+enabled     = true
+warmup      = 3
+iterations  = 20
+sizes_kb    = [1, 8, 64, 1024, 10240]
+algorithms  = ["cagoule", "aes-256-gcm", "chacha20"]
 
-# ── Tailles de message pour la suite encryption/streaming ────────────────────
-# sizes = [1024, 8192, 65536, 1048576, 10485760]  # bytes (défaut)
+[suites.parallel]
+# Suite parallèle ProcessPool + ThreadPool
+# iterations=20 et warmup=5 pour stabilité statistique (v2.3.0 avait 3/1)
+enabled     = true
+warmup      = 5
+iterations  = 20
+workers     = [1, 2, 4, 8, 16, 20]
+executor    = "process"              # "process" | "thread" | "both"
+message_kb  = 1024
 
-# ── Paramètres KDF ───────────────────────────────────────────────────────────
-# kdf_time_costs    = [1, 3, 5]          # Argon2id t_cost
-# kdf_memory_costs  = [16384, 65536, 131072]  # Argon2id m_cost (KiB)
-# kdf_parallelism   = [1, 2, 4]          # Argon2id parallelism
+[suites.bulk]
+# NOUVEAU v2.4.0 : benchmark encrypt_bulk / decrypt_bulk
+# Mesure le gain de la dérivation Argon2id unique sur N messages
+enabled        = true
+warmup         = 2
+iterations     = 10
+batch_sizes    = [1, 5, 10, 50, 100]
+message_kb     = 64
+thread_workers = [1, 2, 4, 8]
 
-# ── Historique SQLite ────────────────────────────────────────────────────────
-db_path = ".cagoule_bench/history.db"
+[suites.components]
+# Benchmarks de composants isolés (C-layer uniquement)
+enabled     = true
+warmup      = 2
+iterations  = 10
+# Cibles : matrix_fwd, matrix_inv, sbox_fwd, sbox_inv, mulmod64
+components  = ["matrix_fwd", "matrix_inv", "sbox_fwd", "sbox_inv", "mulmod64"]
 
-# ── Régression ───────────────────────────────────────────────────────────────
-regression_threshold = -5.0  # % de baisse toléré avant alerte CI
+[reporting]
+# Afficher uniquement les métriques > threshold_pct de variation
+show_only_regressions = false
+# Inclure l'analyse Amdahl dans le rapport parallel
+amdahl_analysis = true
+# Afficher CV (coefficient de variation) pour chaque mesure
+show_cv = true
+# CV > cv_warn_pct → avertissement "variance élevée"
+cv_warn_pct = 5.0
+
+[qshell]
+# Variables d'environnement exposées par `cgl` dans QShell (P4)
+# CAGOULE_WORKERS : nombre de ProcessPool workers
+# "auto" = min(cpu_count // 2, 8)
+default_workers = "auto"
+# Mode bulk activé par défaut pour les pipelines JSON (> 1 message)
+bulk_auto       = true
+
+[suites.ctr]
+# Benchmarks CAGOULE v3.0.0 CTR mode
+enabled    = true
+warmup     = 5
+iterations = 200
+# Cibles roadmap v3.0.0 :
+#   CTR e2e Python : >15 MB/s
+#   CTR 4x C-layer : >25 MB/s
+#   CTR bulk 20 cores: >80 MB/s

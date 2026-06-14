@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cagoule-bench"
-version = "2.1.0"
-description = "Suite de benchmarking cryptographique pour CAGOULE v2.3.0"
+version = "2.2.0"
+description = "Suite de benchmarking cryptographique pour CAGOULE v3.0.0 — CTR mode"
 authors = [{ name = "LASS", email = "slimissa@example.com" }]
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "cagoule>=2.2.0",
+    "cagoule>=3.0.0",
     "cryptography>=41.0",
     "argon2-cffi>=21.3",
     "psutil>=5.9",
@@ -71,3 +71,6 @@ ignore = ["E501", "E701", "E731"]
 # output_dir = "./results"
 # regression_threshold = -5.0
 # db_path = ".cagoule_bench/history.db"
+[tool.setuptools.packages.find]
+include = ["bench*"]
+exclude = ["benchmark_results*", "tests*"]
