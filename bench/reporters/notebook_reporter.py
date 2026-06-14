@@ -70,7 +70,6 @@ def _cell_md_header(results: list[BenchmarkResult]) -> str:
     suites = sorted({r.suite for r in results})
     algos  = sorted({r.algorithm for r in results})
 
-    # Environnement depuis extra du premier résultat
     first_extra = results[0].extra if results else {}
     arch    = first_extra.get("arch", platform.machine())
     v30     = first_extra.get("cagoule_v30", False)
@@ -135,6 +134,7 @@ def _results_to_records(results: list[BenchmarkResult]) -> list[dict]:
 def _cell_imports_and_data(results: list[BenchmarkResult]) -> str:
     records = _results_to_records(results)
     data_json = json.dumps(records, indent=2)
+    data_json = data_json.replace('true', 'True').replace('false', 'False').replace('null', 'None')
 
     return f"""import matplotlib
 matplotlib.use('Agg')  # SSH/CI safe — must be before pyplot import
@@ -177,7 +177,6 @@ df.head(3)"""
 
 def _cell_chart_throughput_comparison() -> str:
     return '''# ── Chart 1 : Débit MB/s par algorithme et taille ────────────────────────────
-# Graphique central du roadmap v3.0.0 : CTR vs CBC vs standards
 
 enc_df = df[df['name'].str.startswith('encrypt') | df['name'].str.contains('ctr-encrypt|cbc-encrypt')].copy()
 enc_df = enc_df[enc_df['throughput_mbps'] > 0]
@@ -210,7 +209,6 @@ else:
     ax.set_xticklabels(sizes)
     ax.legend(loc='upper left', fontsize=8)
     ax.set_ylim(bottom=0)
-    # Ligne cible CTR v3.0.0
     if any('CTR' in a for a in algos):
         ax.axhline(15.0, color=PALETTE_ALGO["CAGOULE-CTR"], linestyle='--', alpha=0.5, label='Cible CTR 15 MB/s')
     plt.tight_layout()
@@ -221,14 +219,12 @@ else:
 
 def _cell_chart_latency_distribution() -> str:
     return '''# ── Chart 2 : Distribution de latence (p50, p95, p99) ───────────────────────
-# Box plot des percentiles par algorithme
 
 lat_df = df[df['mean_ms'] > 0].copy()
 
 if lat_df.empty:
     print("Aucune donnée de latence disponible.")
 else:
-    # On prend la taille 1MB ou la plus grande disponible pour la comparaison
     target_kb = 1024.0
     avail_kbs = sorted(lat_df['data_size_kb'].unique())
     chosen_kb = min(avail_kbs, key=lambda x: abs(x - target_kb))
@@ -270,7 +266,6 @@ cbc = df[df['algorithm'].str.contains('CBC') & df['name'].str.contains('encrypt'
 if ctr.empty or cbc.empty:
     print("Suite CTR ou données CBC non disponibles — skip Chart 3.")
 else:
-    # Merger sur la taille pour calculer le ratio
     ctr_g = ctr.groupby('data_size_kb')['throughput_mbps'].mean().reset_index()
     cbc_g = cbc.groupby('data_size_kb')['throughput_mbps'].mean().reset_index()
     merged = ctr_g.merge(cbc_g, on='data_size_kb', suffixes=('_ctr', '_cbc'))
@@ -281,7 +276,6 @@ else:
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
 
-    # Débit absolu
     w = 0.35
     x = np.arange(len(merged))
     ax1.bar(x - w/2, merged['throughput_mbps_cbc'], w, label='CBC', color=PALETTE_ALGO['CAGOULE-CBC'])
@@ -291,7 +285,6 @@ else:
     ax1.set_ylabel("Débit (MB/s)"); ax1.set_title("Débit CTR vs CBC")
     ax1.legend(fontsize=8); ax1.set_ylim(bottom=0)
 
-    # Speedup
     colors = ['#1E7145' if s >= 1.0 else '#C0392B' for s in merged['speedup'].fillna(0)]
     ax2.bar(x, merged['speedup'], color=colors, edgecolor='white')
     ax2.axhline(1.0, color='gray', linestyle='-', alpha=0.5)
@@ -346,7 +339,6 @@ def _cell_chart_mersenne_heatmap() -> str:
 mers = df[df['suite'] == 'avx2'].copy()
 
 if mers.empty or 'prime_idx' not in mers.columns:
-    # Tenter de récupérer depuis extra si disponible
     print("Suite avx2 / données Mersenne primes non disponibles — skip Chart 5.")
 else:
     pivot = mers.pivot_table(values='throughput_mbps', index='prime_idx',
@@ -390,7 +382,6 @@ else:
 
 
 def _cell_summary(results: list[BenchmarkResult]) -> str:
-    # Compute key numbers
     ctr_results = [r for r in results if 'CTR' in r.algorithm and 'encrypt' in r.name and r.throughput_mbps > 0]
     cbc_results = [r for r in results if 'CBC' in r.algorithm and 'encrypt' in r.name and r.throughput_mbps > 0]
 
@@ -407,7 +398,7 @@ summary = {{
     "ctr_peak_mbps":      {round(ctr_best, 2)},
     "cbc_peak_mbps":      {round(cbc_best, 2)},
     "ctr_vs_cbc_ratio":   "{ratio}",
-    "ctr_target_15mbps":  {ctr_best >= 15.0},
+    "ctr_target_15mbps":  {str(ctr_best >= 15.0)},
 }}
 
 print("=" * 55)
@@ -417,7 +408,7 @@ for k, v in summary.items():
     print(f"  {{k:<28}} {{v}}")
 print("=" * 55)
 
-if summary["ctr_target_15mbps"]:
+if summary["ctr_target_15mbps"] == "True":
     print("  ✅ Cible roadmap >15 MB/s Python e2e : ATTEINTE")
 else:
     gap = 15.0 - summary["ctr_peak_mbps"]
@@ -429,7 +420,6 @@ else:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _build_notebook(results: list[BenchmarkResult]) -> "nbformat.NotebookNode":
-    # Merge all charts into one cell for reliable pre-execution
     all_charts = (
         _cell_imports_and_data(results) + "\n\n" +
         _cell_chart_throughput_comparison() + "\n\n" +
@@ -486,29 +476,16 @@ class NotebookReporter:
 
     def report(self, results: list[BenchmarkResult],
                output_path: str | Path) -> Path:
-        """
-        Génère le notebook et le sauvegarde à output_path.
-
-        Args:
-            results:     Liste de BenchmarkResult depuis l'orchestrateur.
-            output_path: Chemin de sortie (.ipynb).
-
-        Returns:
-            Path du fichier généré.
-        """
         _check_deps(execute=self.execute)
 
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # ── Option A : construction des cellules ──────────────────────────
         nb = _build_notebook(results)
 
-        # ── Option B : pré-exécution headless ────────────────────────────
         if self.execute and NBCONVERT_AVAILABLE:
             nb = self._execute_notebook(nb, output_path.parent)
 
-        # ── Écriture ──────────────────────────────────────────────────────
         with open(output_path, "w", encoding="utf-8") as f:
             nbformat.write(nb, f)
 
@@ -516,22 +493,14 @@ class NotebookReporter:
 
     def _execute_notebook(self, nb: "nbformat.NotebookNode",
                           work_dir: Path) -> "nbformat.NotebookNode":
-        """
-        Pré-exécute le notebook via ExecutePreprocessor.
-
-        Les outputs (figures PNG base64) sont injectés dans les cellules.
-        Le notebook résultant s'ouvre avec tous les graphiques visibles.
-        """
         ep = _ExecutePreprocessor(
             timeout=self.timeout,
             kernel_name=self.kernel,
-            allow_errors=True,   # Un graphique qui échoue ne bloque pas tout
+            allow_errors=True,
         )
         try:
             nb, _ = ep.preprocess(nb, {"metadata": {"path": str(work_dir)}})
-        except Exception as exc:   # noqa: BLE001
-            # Si l'exécution échoue (kernel absent, etc.), retourner le
-            # notebook non-exécuté plutôt que de planter.
+        except Exception as exc:
             import warnings
             warnings.warn(
                 f"NotebookReporter: pré-exécution échouée ({exc}). "
