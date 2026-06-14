@@ -134,12 +134,7 @@ class CTRSuite(BaseSuite):
     # ── Benchmark sections ─────────────────────────────────────────────────────
 
     def _bench_ctr_vs_cbc(self) -> list[BenchmarkResult]:
-        """
-        Section 1 — CTR vs CBC sur toutes les tailles.
-
-        C'est le chiffre phare du roadmap v3.0.0 :
-        CTR projette >15 MB/s Python e2e vs ~7 MB/s CBC.
-        """
+        """Section 1 — CTR vs CBC sur toutes les tailles."""
         results = []
         kw = self._kw()
 
@@ -147,11 +142,9 @@ class CTRSuite(BaseSuite):
             pt = os.urandom(size)
             label = self._fmt(size)
 
-            # Pre-compute ciphertexts
             cbc_ct = encrypt_cbc(pt, PASSWORD, **kw)
             ctr_ct = encrypt_ctr(pt, PASSWORD, **kw)
 
-            # CT overhead : CTR has no PKCS7 padding
             cbc_overhead = len(cbc_ct) - size
             ctr_overhead = len(ctr_ct) - size
 
@@ -183,27 +176,16 @@ class CTRSuite(BaseSuite):
         return results
 
     def _bench_4x_vs_1x(self) -> list[BenchmarkResult]:
-        """
-        Section 2 — Pipeline 4x (encrypt_bulk_ctr batch 1 msg) vs encrypt_ctr.
-
-        La fonction cagoule_ctr_encrypt_4x est invoquée automatiquement
-        par encrypt_ctr() via le dispatch C (>= PIPELINE4_THRESHOLD blocs).
-        Ce benchmark mesure le gain ILP sur les messages qui dépassent ce seuil.
-
-        Tailles testées : 128 octets (< seuil), 4KB (seuil), 64KB, 1MB.
-        """
+        """Section 2 — Pipeline 4x auto-dispatch."""
         results = []
         kw = self._kw()
-
-        # Tailles où le pipeline 4x est actif (>= 8 blocs = 128 octets)
         sizes_4x = [128, 4_096, 65_536, 1_048_576]
 
         for size in sizes_4x:
             pt = os.urandom(size)
             label = self._fmt(size)
-            above_threshold = size >= 128  # CAGOULE_CTR_P4_THRESHOLD × 16 bytes
+            above_threshold = size >= 128
 
-            # Standard CTR (dispatche en 4x si AVX2 + assez de blocs)
             results += self._bench(
                 f"ctr-auto-{label}", "CAGOULE-CTR-auto",
                 lambda pt=pt, kw=kw: encrypt_ctr(pt, PASSWORD, **kw),
@@ -211,19 +193,13 @@ class CTRSuite(BaseSuite):
                 {
                     "pipeline": "4x_auto" if above_threshold else "1x_scalar",
                     "above_4x_threshold": above_threshold,
-                    "note": "cagoule_ctr_encrypt dispatches to 4x if AVX2 and n_blocks >= threshold",
                 }
             )
 
         return results
 
     def _bench_symmetry(self) -> list[BenchmarkResult]:
-        """
-        Section 3 — Symétrie CTR : encrypt et decrypt doivent avoir le même débit.
-
-        En CTR, encrypt et decrypt sont identiques côté C (même pipeline).
-        Ce test valide empiriquement que les deux directions sont équilibrées.
-        """
+        """Section 3 — Symétrie CTR encrypt = decrypt."""
         results = []
         kw = self._kw()
 
@@ -235,7 +211,7 @@ class CTRSuite(BaseSuite):
             r_enc = self._bench(
                 f"ctr-sym-encrypt-{label}", "CAGOULE-CTR-symmetry-enc",
                 lambda pt=pt, kw=kw: encrypt_ctr(pt, PASSWORD, **kw),
-                size, {"direction": "encrypt", "note": "CTR encrypt == decrypt at C level"}
+                size, {"direction": "encrypt"}
             )
             r_dec = self._bench(
                 f"ctr-sym-decrypt-{label}", "CAGOULE-CTR-symmetry-dec",
@@ -244,7 +220,6 @@ class CTRSuite(BaseSuite):
             )
             results += r_enc + r_dec
 
-            # Record ratio for inspection (stored in extra of first result)
             if r_enc and r_dec:
                 enc_tp = r_enc[0].throughput_mbps
                 dec_tp = r_dec[0].throughput_mbps
@@ -255,13 +230,7 @@ class CTRSuite(BaseSuite):
         return results
 
     def _bench_migration(self) -> list[BenchmarkResult]:
-        """
-        Section 4 — migrate_cbc_to_ctr() : coût de migration.
-
-        Mesure le coût d'une migration complète CBC v0x01 → CTR v0x02 :
-        déchiffrement CBC + re-chiffrement CTR + zéroisation plaintext.
-        Utile pour planifier la migration de vaults existants.
-        """
+        """Section 4 — migrate_cbc_to_ctr() cost."""
         results = []
 
         for size in [1_024, 65_536, 1_048_576]:
@@ -276,7 +245,6 @@ class CTRSuite(BaseSuite):
                 {
                     "src_version": "0x01 (CBC)",
                     "dst_version": "0x02 (CTR)",
-                    "note": "Includes 1× decrypt_cbc + 1× encrypt_ctr + zeroize",
                     "total_kdf_calls": 2,
                 }
             )
@@ -286,16 +254,13 @@ class CTRSuite(BaseSuite):
     def _bench_bulk_ctr(self) -> list[BenchmarkResult]:
         """
         Section 5 — encrypt_bulk_ctr : amortissement KDF sur N messages.
-
-        Mesure le débit de encrypt_bulk_ctr(N messages, password) vs
-        N appels encrypt_ctr individuels. L'amortissement Argon2id
-        (un seul call KDF pour N messages) est le levier clé pour atteindre
-        >80 MB/s agrégé avec ProcessPool.
-
-        N : 1, 5, 10, 50, 100 messages de 64KB chacun.
+        
+        FIXED v2.2.1: individual path now uses pre-derived params (kw)
+        to avoid re-running Argon2id for each message.
         """
         results = []
-        msg_size = 65_536  # 64KB par message
+        msg_size = 65_536
+        kw = self._kw()
 
         for n in [1, 5, 10, 50, 100]:
             messages = [os.urandom(msg_size) for _ in range(n)]
@@ -309,19 +274,17 @@ class CTRSuite(BaseSuite):
                 {
                     "n_messages": n, "msg_size_kb": msg_size // 1024,
                     "kdf_calls": 1, "mode": "bulk",
-                    "note": f"1 Argon2id derivation shared across {n} messages",
                 }
             )
 
-            # Individuel (N dérivations KDF) — pour comparaison
+            # Individual with pre-derived params (FIXED)
             results += self._bench(
                 f"individual-ctr-{n}msgs", "CAGOULE-individual-CTR",
-                lambda msgs=messages: [encrypt_ctr(m, PASSWORD) for m in msgs],
+                lambda msgs=messages, kw=kw: [encrypt_ctr(m, PASSWORD, **kw) for m in msgs],
                 total_size,
                 {
                     "n_messages": n, "msg_size_kb": msg_size // 1024,
                     "kdf_calls": n, "mode": "individual",
-                    "note": f"{n} independent Argon2id derivations",
                 }
             )
 
