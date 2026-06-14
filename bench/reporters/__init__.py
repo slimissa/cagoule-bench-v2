@@ -3,6 +3,7 @@
 from bench.reporters.console_reporter import ConsoleReporter
 from bench.reporters.data_reporters import CsvReporter, JsonReporter, MarkdownReporter
 from bench.reporters.html_reporter import HtmlReporter
+from bench.reporters.notebook_reporter import NotebookReporter
 
 __all__ = [
     "ConsoleReporter",
@@ -10,4 +11,5 @@ __all__ = [
     "CsvReporter",
     "MarkdownReporter",
     "HtmlReporter",
+    "NotebookReporter",
 ]
