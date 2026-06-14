@@ -247,6 +247,15 @@ class Orchestrator:
                 HtmlReporter().report(results, path)
                 generated["html"] = path
                 console.print(f"  [dim]→ HTML :[/dim] {path}")
+            elif fmt in ("notebook", "nb", "ipynb"):
+                path = output_dir / f"bench_{ts}.ipynb"
+                execute = not getattr(self, "_notebook_no_execute", False)
+                try:
+                    NotebookReporter(execute=execute).report(results, path)
+                    generated["notebook"] = path
+                    console.print(f"  [dim]→ IPYNB:[/dim] {path}")
+                except ImportError as e:
+                    console.print(f"  [yellow]Notebook reporter: {e}[/yellow]")
             else:
                 console.print(f"[yellow]Format inconnu : {fmt} — ignoré[/yellow]")
 
