@@ -28,6 +28,7 @@ from bench.reporters import (
     HtmlReporter,
     JsonReporter,
     MarkdownReporter,
+    NotebookReporter,
 )
 from bench.suites import ALL_SUITES
 from bench.suites.base import BenchmarkResult
@@ -83,6 +84,7 @@ class Orchestrator:
         self.tag = tag
         self._run_id: str | None = None
         self._duration_s: float = 0.0
+        self._notebook_no_execute: bool = False
 
         unknown = [s for s in self.suite_names if s not in ALL_SUITES]
         if unknown:
@@ -102,7 +104,7 @@ class Orchestrator:
         be_color = "green" if matrix_be == "avx2" else "yellow"
 
         console.print()
-        console.rule("[bold blue]cagoule-bench v2.0.0[/bold blue]")
+        console.rule("[bold blue]cagoule-bench v2.2.0[/bold blue]")
         console.print(
             f"  [dim]Platform:[/dim] [cyan]{platform.machine()}[/cyan]  "
             f"[dim]Python:[/dim] [cyan]{platform.python_version()}[/cyan]  "
@@ -174,21 +176,9 @@ class Orchestrator:
         )
         console.print()
 
-        # BUG3 FIX: NE PAS sauvegarder ici.
-        # save_history() est appelé explicitement depuis le CLI APRÈS
-        # check_regression_db(), garantissant que le run courant n'est
-        # pas inclus dans son propre baseline de comparaison.
-
         return all_results
 
     def save_history(self, results: list[BenchmarkResult]) -> str | None:
-        """
-        Sauvegarde le run dans HistoryDB.
-
-        Séparé de run() pour permettre d'appeler check_regression_db()
-        AVANT la sauvegarde, évitant que le run courant soit inclus dans
-        son propre baseline (BUG3 de v2.0.0).
-        """
         if not self.db_path:
             return None
         try:
@@ -249,11 +239,11 @@ class Orchestrator:
                 console.print(f"  [dim]→ HTML :[/dim] {path}")
             elif fmt in ("notebook", "nb", "ipynb"):
                 path = output_dir / f"bench_{ts}.ipynb"
-                execute = not getattr(self, "_notebook_no_execute", False)
+                execute = not self._notebook_no_execute
                 try:
                     NotebookReporter(execute=execute).report(results, path)
                     generated["notebook"] = path
-                    console.print(f"  [dim]→ IPYNB:[/dim] {path}")
+                    console.print(f"  [dim]→ IPYNB :[/dim] {path}")
                 except ImportError as e:
                     console.print(f"  [yellow]Notebook reporter: {e}[/yellow]")
             else:
@@ -274,8 +264,6 @@ class Orchestrator:
             return True, ["Pas de baseline — premier run."]
 
         raw = json.loads(baseline_path.read_text())
-        # BUG4 FIX: JsonReporter peut sauvegarder une liste plate OU {"results": [...]}
-        # L'ancien code ne gérait que le format dict → baseline silencieusement vide
         if isinstance(raw, list):
             baseline_results = raw
         else:
