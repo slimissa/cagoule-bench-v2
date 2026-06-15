@@ -269,7 +269,7 @@ class CTRSuite(BaseSuite):
             # Bulk (1 dérivation KDF)
             results += self._bench(
                 f"bulk-ctr-{n}msgs", "CAGOULE-bulk-CTR",
-                lambda msgs=messages: encrypt_bulk_ctr(msgs, PASSWORD),
+                lambda msgs=messages, kw=kw: encrypt_bulk_ctr(msgs, PASSWORD, params=kw.get("params")), 
                 total_size,
                 {
                     "n_messages": n, "msg_size_kb": msg_size // 1024,
@@ -280,7 +280,7 @@ class CTRSuite(BaseSuite):
             # Individual with pre-derived params (FIXED)
             results += self._bench(
                 f"individual-ctr-{n}msgs", "CAGOULE-individual-CTR",
-                lambda msgs=messages, kw=kw: [encrypt_ctr(m, PASSWORD, **kw) for m in msgs],
+                lambda msgs=messages: [encrypt_ctr(m, PASSWORD) for m in msgs],
                 total_size,
                 {
                     "n_messages": n, "msg_size_kb": msg_size // 1024,
