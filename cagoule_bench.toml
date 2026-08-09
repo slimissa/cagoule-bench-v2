@@ -1,0 +1,110 @@
+# cagoule_bench.toml — Configuration cagoule-bench v2.2.0
+#
+# v2.2.0 : CTR suite, notebook reporter, CAGOULE v3.0.0 support
+#   - min_baseline_n = 5 : ignore les comparaisons si la baseline < 5 mesures
+#   - Suite CTR : benchmark complet CTR vs CBC, 4x pipeline, bulk, migration
+#   - Suite encryption : utilise encrypt_cbc() pour compatibilité historique
+#
+# v3.1.0 release audit (tâche 3) : cibles CTR relevées dans [suites.ctr]
+# ci-dessous (fix AVX2 lazy-reduction, ~2x throughput) -- voir ce bloc pour
+# le détail. Rien d'autre dans ce fichier ne référence v3.0.0/v3.1.0
+# directement (les CAGOULE_V3x sont détectés dynamiquement par les suites
+# elles-mêmes, pas configurés ici).
+
+[bench]
+version         = "2.2.0"
+output_format   = "console"
+output_file     = ""
+units           = "MB/s"
+warmup          = 3
+iterations      = 20
+
+[regression]
+# Seuil de régression en % (négatif = perte de perf)
+threshold_pct     = -5.0
+# NOUVEAU v2.4.0 : n minimum pour une comparaison baseline valide
+# Si la baseline a été mesurée avec N < min_baseline_n, la comparaison
+# est ignorée et marquée "baseline_insufficient" plutôt que "FAIL".
+# Élimine les faux positifs sur N=2 (AES-256-GCM, ChaCha20 petits messages).
+min_baseline_n    = 5
+warmup_excluded   = true             # warmup ignorés dans le décompte N
+
+[suites.encryption]
+# Suite principale : chiffrement/déchiffrement à tailles variées
+enabled     = true
+warmup      = 3
+iterations  = 20
+sizes_kb    = [1, 8, 64, 1024, 10240]
+algorithms  = ["cagoule", "aes-256-gcm", "chacha20"]
+
+[suites.parallel]
+# Suite parallèle ProcessPool + ThreadPool
+# iterations=20 et warmup=5 pour stabilité statistique (v2.3.0 avait 3/1)
+enabled     = true
+warmup      = 5
+iterations  = 20
+workers     = [1, 2, 4, 8, 16, 20]
+executor    = "process"              # "process" | "thread" | "both"
+message_kb  = 1024
+
+[suites.bulk]
+# NOUVEAU v2.4.0 : benchmark encrypt_bulk / decrypt_bulk
+# Mesure le gain de la dérivation Argon2id unique sur N messages
+enabled        = true
+warmup         = 2
+iterations     = 10
+batch_sizes    = [1, 5, 10, 50, 100]
+message_kb     = 64
+thread_workers = [1, 2, 4, 8]
+
+[suites.components]
+# Benchmarks de composants isolés (C-layer uniquement)
+enabled     = true
+warmup      = 2
+iterations  = 10
+# Cibles : matrix_fwd, matrix_inv, sbox_fwd, sbox_inv, mulmod64
+components  = ["matrix_fwd", "matrix_inv", "sbox_fwd", "sbox_inv", "mulmod64"]
+
+[reporting]
+# Afficher uniquement les métriques > threshold_pct de variation
+show_only_regressions = false
+# Inclure l'analyse Amdahl dans le rapport parallel
+amdahl_analysis = true
+# Afficher CV (coefficient de variation) pour chaque mesure
+show_cv = true
+# CV > cv_warn_pct → avertissement "variance élevée"
+cv_warn_pct = 5.0
+
+[qshell]
+# Variables d'environnement exposées par `cgl` dans QShell (P4)
+# CAGOULE_WORKERS : nombre de ProcessPool workers
+# "auto" = min(cpu_count // 2, 8)
+default_workers = "auto"
+# Mode bulk activé par défaut pour les pipelines JSON (> 1 message)
+bulk_auto       = true
+
+[suites.ctr]
+# Benchmarks CAGOULE v3.1.0 CTR mode
+enabled    = true
+warmup     = 5
+iterations = 200
+# Cibles v3.1.0 (release audit, tâche 3) — v3.0.0 avait 15/25/80, ~2x trop
+# bas depuis le fix AVX2 lazy-reduction v3.1.0 (cagoule_matrix_mul_avx2_lazy,
+# ~2x throughput CTR C-layer : ~20-31 MB/s → ~50 MB/s mesuré) :
+#   CTR e2e Python : >30 MB/s   (bench/suites/ctr_suite.py: target_mbps)
+#   CTR 4x C-layer : >50 MB/s   (mesuré ~50 MB/s post-fix -- >25 MB/s
+#                                 était déjà dépassé de 2x, plancher relevé
+#                                 en conséquence ; pas un target_mbps codé
+#                                 en dur quelque part, juste ce commentaire)
+#   CTR bulk 20 cores: >120 MB/s (bench/suites/parallel_suite.py: target_mbps
+#                                 -- PAS re-mesuré sur du 20-cœurs réel pour
+#                                 v3.1.0, valeur demandée/conservatrice)
+# Voir aussi bench/suites/streaming_suite.py: target_mbps_ctr, 18→30 MB/s
+# (section séparée, pas listée dans ce bloc [suites.ctr] car streaming a
+# sa propre config -- pas de [suites.streaming] dédiée dans ce fichier).
+
+[notebook]
+# Notebook reporter (cagoule-bench run --format notebook)
+execute       = true    # Option B : pré-exécution headless (false = Option A)
+kernel        = "python3"
+timeout_s     = 300     # timeout kernel par cellule
