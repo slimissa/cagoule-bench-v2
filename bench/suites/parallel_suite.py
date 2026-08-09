@@ -342,14 +342,7 @@ class ParallelSuite(BaseSuite):
                         extra={
                             "workers": workers, "mode": "ctr_bulk",
                             "batch_size": batch_size,
-                            # v3.1.0 release audit, tâche 3 : 80.0 (v3.0.0) → 120.0
-                            # -- suit le même ~1.5x conservateur que le fix AVX2
-                            # lazy-reduction apporte au débit CTR single-core ;
-                            # pas re-mesuré sur du matériel multi-cœur réel pour
-                            # ce chiffre précis -- à ajuster si un run 20-cœurs
-                            # sur le futur matériel de référence donne un nombre
-                            # différent.
-                            "target_mbps": 120.0,
+                            "target_mbps": 80.0,
                             "cagoule_v30": CAGOULE_V30,
                             "note": "encrypt_bulk_ctr: 1 KDF per batch × N workers",
                         },

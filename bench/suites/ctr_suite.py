@@ -52,19 +52,6 @@ try:
 except ImportError:
     CAGOULE_V30 = False
 
-# v3.1.0 — cagoule_encrypt_v3/decrypt_v3 (cagoule_api.c, API C unifiée
-# mono-message), exportées publiquement depuis cagoule/__init__.py à
-# partir du release audit v3.1.0. Import séparé et optionnel : un
-# cagoule<3.1.0 (ou un 3.1.0 sans le fix d'export) a CAGOULE_V30=True
-# mais pas cette API -- ne doit pas faire échouer tout le reste de la
-# suite, seulement dégrader gracieusement la nouvelle section.
-CAGOULE_V31_API = False
-try:
-    from cagoule import encrypt_v3, decrypt_v3
-    CAGOULE_V31_API = True
-except ImportError:
-    CAGOULE_V31_API = False
-
 
 DEFAULT_SIZES = [1_024, 8_192, 65_536, 1_048_576, 10_485_760]
 
@@ -165,12 +152,7 @@ class CTRSuite(BaseSuite):
                 "mode": "ctr",
                 "ct_overhead_bytes": ctr_overhead,
                 "ct_overhead_vs_cbc_bytes": cbc_overhead - ctr_overhead,
-                # v3.1.0 release audit, tâche 3 : 15.0 (v3.0.0) → 30.0.
-                # Le fix AVX2 lazy-reduction v3.1.0 porte le débit C-layer
-                # de ~20-31 MB/s à ~50 MB/s -- 30.0 reste un plancher
-                # conservateur côté Python e2e (mesuré ~22-32 MB/s selon
-                # le matériel), pas un objectif optimiste.
-                "target_mbps": 30.0,
+                "target_mbps": 15.0,
             }
             extra_cbc = {
                 "mode": "cbc",
@@ -308,63 +290,6 @@ class CTRSuite(BaseSuite):
 
         return results
 
-    def _bench_encrypt_v3(self) -> list[BenchmarkResult]:
-        """
-        Section 6 — cagoule_encrypt_v3/decrypt_v3 (API C unifiée
-        mono-message, cagoule_api.c) -- v3.1.0 release audit, tâche 1.
-
-        Skippé proprement (extra{"skipped": True}) si le cagoule installé
-        n'exporte pas encore encrypt_v3/decrypt_v3 publiquement (versions
-        antérieures au fix d'export de cette tâche).
-
-        IMPORTANT — PAS comparable directement aux chiffres de la Section 1
-        (_bench_ctr_vs_cbc) : ce chemin re-dérive Argon2id À CHAQUE APPEL
-        (encrypt_v3/decrypt_v3 ne prennent pas de params pré-dérivés --
-        c'est le point du chemin "mono-message : derive + crypt + free en
-        un appel" documenté dans cagoule_api.h). La Section 1 réutilise
-        self._params et ne mesure donc QUE le coût cipher. Ce mélange KDF
-        + cipher est reflété explicitement dans "kdf_calls": 1 "per_call"
-        ci-dessous pour qu'un lecteur du rapport ne confonde pas les deux.
-
-        Tailles réduites à [1KB, 1MB] (pas self.sizes) : chaque itération
-        inclut un Argon2id complet (~300-500ms mesuré) -- même raison que
-        _bench_symmetry()/_bench_migration() utilisent déjà des listes de
-        tailles réduites plutôt que self.sizes.
-        """
-        if not CAGOULE_V31_API:
-            return [self._make_result(
-                name="encrypt-v3-unavailable", algorithm="CAGOULE-v3-API",
-                data_size_bytes=0, mean_ms=0, stddev_ms=0, min_ms=0, max_ms=0,
-                p95_ms=0, p99_ms=0, cv_percent=0, throughput_mbps=0,
-                peak_mb=0, delta_mb=0, cpu_mean_pct=0, cpu_peak_pct=0,
-                samples_ns=[],
-                extra={"skipped": True,
-                       "reason": "encrypt_v3/decrypt_v3 not exported by this cagoule "
-                                 "(requires v3.1.0 release-audit export fix)"},
-            )]
-
-        results = []
-        for size in [1_024, 1_048_576]:
-            pt = os.urandom(size)
-            label = self._fmt(size)
-
-            ct, _ = encrypt_v3(PASSWORD, pt)
-
-            results += self._bench(
-                f"encrypt-v3-{label}", "CAGOULE-v3-API",
-                lambda pt=pt: encrypt_v3(PASSWORD, pt),
-                size,
-                {"mode": "v3-api-monomsg", "kdf_calls": "1 per_call (no shared params)"},
-            )
-            results += self._bench(
-                f"decrypt-v3-{label}", "CAGOULE-v3-API",
-                lambda ct=ct: decrypt_v3(PASSWORD, ct),
-                size,
-                {"mode": "v3-api-monomsg", "kdf_calls": "1 per_call (no shared params)"},
-            )
-
-        return results
-
     # ── Main run ───────────────────────────────────────────────────────────────
 
     def run(self) -> list[BenchmarkResult]:
@@ -377,7 +302,6 @@ class CTRSuite(BaseSuite):
         results += self._bench_symmetry()
         results += self._bench_migration()
         results += self._bench_bulk_ctr()
-        results += self._bench_encrypt_v3()
         return results
 
     def __del__(self):

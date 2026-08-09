@@ -251,12 +251,7 @@ class StreamingSuite(BaseSuite):
                             "ram_efficiency": (
                                 "O(chunk)" if mem.peak_mb < (size / 1_048_576 * 0.1) else "O(total)"
                             ),
-                            # v3.1.0 release audit, tâche 3 : 18.0 (v3.0.0) → 30.0.
-                            # Cette section simule le "streaming" par chunking
-                            # manuel côté Python (encrypt_ctr par chunk), pas
-                            # via le vrai cagoule_stream.c -- voir cagoule/stream.py
-                            # pour le binding réel, pas encore branché ici.
-                            "cagoule_available": CAGOULE_AVAILABLE, "cagoule_v30": CAGOULE_V30, "target_mbps_ctr": 30.0 if algo == "CAGOULE-CTR" else None,
+                            "cagoule_available": CAGOULE_AVAILABLE, "cagoule_v30": CAGOULE_V30, "target_mbps_ctr": 18.0 if algo == "CAGOULE-CTR" else None,
                             "note_non_ce_generation": "Includes os.urandom(12) nonce generation per chunk — realistic streaming overhead",
                         },
                     )

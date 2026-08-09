@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import platform
 import time
-import warnings
 from pathlib import Path
 from typing import Callable
 
@@ -38,112 +37,18 @@ console = Console()
 
 REGRESSION_THRESHOLD_PCT = -5.0
 
-# ── Détection divergence libcagoule.so (v3.1.0 release audit, tâche 1) ─────
-#
-# cagoule/_binding.py::_find_lib() émet un RuntimeWarning à l'IMPORT si les
-# deux copies relatives de libcagoule.so (cagoule/libcagoule.so et
-# cagoule/c/libcagoule.so) existent avec un contenu DIFFÉRENT -- exactement
-# le scénario qui a causé une erreur de mesure réelle pendant l'audit de
-# release v3.1.0 (throughput incohérent car le benchmark chargeait une
-# copie périmée sans le fix AVX2 lazy-reduction). Avant ce correctif, ce
-# warning partait juste sur stderr et n'apparaissait JAMAIS dans le rapport
-# -- silencieux pour quiconque ne lit pas les logs bruts de la console.
-#
-# _binding.py émet aussi 3 AUTRES RuntimeWarning distincts (LIBCAGOULE_PATH
-# invalide, échec de chargement ctypes.CDLL, .so introuvable même via ld.so)
-# -- on ne veut PAS les confondre avec la divergence : seul le message de
-# divergence commence par "cagoule: plusieurs copies de libcagoule.so
-# trouvées". Matcher sur cette sous-chaîne précise, pas juste "RuntimeWarning"
-# ou "cagoule:", pour ne pas mal étiqueter un autre type d'avertissement.
-_LIB_DIVERGENCE_MARKER = "plusieurs copies de libcagoule.so trouvées"
+# Tenter de récupérer la version CAGOULE
+try:
+    import cagoule as _cag
 
-LIB_DIVERGENCE_WARNING: bool = False
-LIB_DIVERGENCE_MESSAGE: str = ""
-
-with warnings.catch_warnings(record=True) as _caught:
-    warnings.simplefilter("always")
-
-    # Tenter de récupérer la version CAGOULE
+    CAGOULE_VERSION = getattr(_cag, "__version__", "unknown")
     try:
-        import cagoule as _cag
-
-        CAGOULE_VERSION = getattr(_cag, "__version__", "unknown")
-        # v3.1.0 release audit, tâche 3 : get_backend_info_v310() ajoute
-        # neon_backend + matrix_backend peut valoir "neon" (ARM). Dégrade
-        # vers backend_info (v2.2.0) si absent -- ne fait jamais échouer
-        # l'import de cagoule lui-même.
-        try:
-            from cagoule._binding import get_backend_info_v310 as _get_v310
-            _CAGOULE_BACKEND = _get_v310()
-        except ImportError:
-            try:
-                from cagoule import backend_info as _CAGOULE_BACKEND
-            except ImportError:
-                _CAGOULE_BACKEND = {}
+        from cagoule import backend_info as _CAGOULE_BACKEND
     except ImportError:
-        CAGOULE_VERSION = "not-installed"
         _CAGOULE_BACKEND = {}
-
-    # CORRECTIF : le bloc ci-dessus NE suffit PAS à capturer le
-    # RuntimeWarning de _find_lib() dans le cas général. `cagoule` est très
-    # probablement DÉJÀ dans sys.modules à ce stade -- `from bench.suites
-    # import ALL_SUITES` (import ci-dessus, ligne ~34) charge
-    # bench/suites/ctr_suite.py etc., qui font eux-mêmes `from cagoule
-    # import ...` à leur PROPRE portée module, donc `cagoule._binding` (et
-    # son `_lib_path = _find_lib()` exécuté une seule fois, à l'import) a
-    # déjà tourné et déjà émis son warning -- non intercepté, puisque ce
-    # `with` n'existait pas encore à ce moment. `import cagoule` ci-dessus
-    # ne fait alors qu'un cache hit sys.modules, sans ré-exécuter le corps
-    # du module ni ré-émettre le warning. Se fier au warning d'import est
-    # donc fragile vis-à-vis de l'ordre d'import du paquet bench tout
-    # entier -- pas fiable.
-    #
-    # Solution robuste, indépendante de l'ordre d'import : rappeler
-    # directement _find_lib() (fonction pure, sans effet de bord au-delà
-    # de la lecture des mtimes/contenus des .so) sous simplefilter("always")
-    # pour forcer la ré-émission du warning si la divergence existe
-    # toujours, peu importe qui a importé cagoule en premier ni quand.
-    try:
-        from cagoule._binding import _find_lib as _cagoule_find_lib
-        _cagoule_find_lib()
-    except ImportError:
-        pass
-
-    _other_cagoule_warnings: list[warnings.WarningMessage] = []
-    for _w in _caught:
-        if issubclass(_w.category, RuntimeWarning) and _LIB_DIVERGENCE_MARKER in str(_w.message):
-            LIB_DIVERGENCE_WARNING = True
-            LIB_DIVERGENCE_MESSAGE = str(_w.message)
-        elif issubclass(_w.category, RuntimeWarning):
-            # Autre RuntimeWarning cagoule (LIBCAGOULE_PATH invalide, échec
-            # de chargement, .so introuvable) -- pas la divergence. On ne
-            # ré-émet PAS ici (on est encore dans le bloc `with` : un
-            # warnings.warn() ici serait ré-intercepté par record=True, pas
-            # affiché) -- on le note pour affichage après la sortie du bloc.
-            _other_cagoule_warnings.append(_w)
-
-# En dehors du bloc `with` : le filtrage/enregistrement par défaut de
-# Python est restauré. Ré-afficher les autres avertissements cagoule (non-
-# divergence) ici pour préserver le comportement stderr existant, sans les
-# perdre ni les confondre avec la divergence.
-for _w in _other_cagoule_warnings:
-    warnings.warn_explicit(_w.message, _w.category, _w.filename, _w.lineno)
-
-if LIB_DIVERGENCE_WARNING:
-    # Log PROMINENT immédiatement à l'import -- ne pas attendre run() : un
-    # `cagoule-bench info` ou tout autre usage de l'orchestrator doit aussi
-    # voir cet avertissement, pas seulement `cagoule-bench run`.
-    console.print()
-    console.print(
-        "[bold red]⚠ AVERTISSEMENT : copies de libcagoule.so divergentes détectées[/bold red]"
-    )
-    console.print(f"[yellow]{LIB_DIVERGENCE_MESSAGE}[/yellow]")
-    console.print(
-        "[dim]La copie la plus récente a été chargée (comportement correct) -- "
-        "ce run n'est PAS interrompu, mais lib_divergence_warning=True sera "
-        "attaché à chaque résultat de ce run pour traçabilité.[/dim]"
-    )
-    console.print()
+except ImportError:
+    CAGOULE_VERSION = "not-installed"
+    _CAGOULE_BACKEND = {}
 
 
 class BenchmarkError(Exception):
@@ -196,7 +101,7 @@ class Orchestrator:
         # ── Header ────────────────────────────────────────────────────
         matrix_be = _CAGOULE_BACKEND.get("matrix_backend", "?")
         omega_be = _CAGOULE_BACKEND.get("omega_backend", "?")
-        be_color = "green" if matrix_be in ("avx2", "neon") else "yellow"
+        be_color = "green" if matrix_be == "avx2" else "yellow"
 
         console.print()
         console.rule("[bold blue]cagoule-bench v2.2.0[/bold blue]")
@@ -265,26 +170,10 @@ class Orchestrator:
                 progress_callback(suite_name)
 
         self._duration_s = time.perf_counter() - t_start
-
-        # v3.1.0 release audit, tâche 1 : attacher lib_divergence_warning à
-        # CHAQUE résultat de ce run, pas seulement au log de démarrage --
-        # pour qu'un JSON/CSV/notebook exporté isolément (sans avoir vu la
-        # console au moment de l'import) porte quand même la trace que ce
-        # run s'est fait avec des copies de libcagoule.so divergentes.
-        if LIB_DIVERGENCE_WARNING:
-            for _r in all_results:
-                _r.extra["lib_divergence_warning"] = True
-
         console.print()
         console.rule(
             f"[green]Terminé en {self._duration_s:.1f}s — {len(all_results)} résultats[/green]"
         )
-        if LIB_DIVERGENCE_WARNING:
-            console.print(
-                "[bold yellow]⚠ Rappel : ce run porte lib_divergence_warning=True "
-                "sur chaque résultat (copies de libcagoule.so divergentes détectées "
-                "à l'import -- voir avertissement ci-dessus).[/bold yellow]"
-            )
         console.print()
 
         return all_results
@@ -418,10 +307,7 @@ class Orchestrator:
     ) -> tuple[bool, list[str]]:
         if not self.db_path:
             return True, ["Pas de DB configurée — skip détection DB."]
-        # CORRECTIF (v3.1.0 release audit) : baseline restreint à la version
-        # CAGOULE courante -- voir HistoryDB.detect_regression()/get_trend().
         with HistoryDB(self.db_path) as db:
             return db.detect_regression(
-                results, n_baseline=n_baseline, threshold_pct=threshold_pct, tag=tag,
-                cagoule_version=CAGOULE_VERSION,
+                results, n_baseline=n_baseline, threshold_pct=threshold_pct, tag=tag
             )

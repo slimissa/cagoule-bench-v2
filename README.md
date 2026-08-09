@@ -2,7 +2,7 @@
 
 Suite de benchmarking académique officielle pour **CAGOULE** — Cryptographie Algébrique Géométrique par Ondes et Logique Entrelacée.
 
-> **Compatibilité cible :** CAGOULE v3.1.0+ (CTR mode · AVX2 4x/lazy-reduction · NEON (ARM) · `encrypt_ctr` · `encrypt_bulk_ctr` · `encrypt_v3`/`decrypt_v3` · `CagouleStreamCtx`)  
+> **Compatibilité cible :** CAGOULE v3.0.0+ (CTR mode · AVX2 4x · `encrypt_ctr` · `encrypt_bulk_ctr`)  
 > Compatible descendante : CAGOULE v2.2.0+ (CBC uniquement)
 
 ---
@@ -11,14 +11,12 @@ Suite de benchmarking académique officielle pour **CAGOULE** — Cryptographie 
 
 | Feature | Description |
 |---|---|
-| **CTRSuite** | Benchmark CTR vs CBC, pipeline 4x, symétrie encrypt/decrypt, migration, bulk KDF, `encrypt_v3`/`decrypt_v3` (API C unifiée) |
+| **CTRSuite** | Benchmark CTR vs CBC, pipeline 4x, symétrie encrypt/decrypt, migration, bulk KDF |
 | **EncryptionSuite** | `encrypt_cbc()` historique + `encrypt_ctr()` séparé — HistoryDB par mode |
-| **ParallelSuite** | `encrypt_bulk_ctr` ProcessPool — cible >120 MB/s à 20 cœurs |
-| **StreamingSuite** | CTR streaming (chunking Python) — cible >30 MB/s vs ~7.8 MB/s CBC |
-| **AVX2Suite** | Bloc CBC AVX2 vs scalaire + **CTR-lazy-path** (`cagoule_matrix_mul_avx2_lazy`, `ctr_backend`/`ctr_4x_available` via `get_backend_info_v310()`) |
+| **ParallelSuite** | `encrypt_bulk_ctr` ProcessPool — cible >80 MB/s à 20 cœurs |
+| **StreamingSuite** | CTR streaming — cible >18 MB/s vs ~7.8 MB/s CBC |
+| **AVX2Suite** | Bloc CTR 4x — gain ILP des 4 blocs simultanés |
 | **Notebook Reporter** | `.ipynb` pré-exécuté (Option B) — 7 graphiques Matplotlib/Seaborn inline |
-| **HistoryDB** | Régression détectée par version CAGOULE (`cagoule_version`), plus de mélange v3.0.0/v3.1.0 dans le baseline |
-| **`_find_lib()` warning** | Divergence entre copies de `libcagoule.so` détectée et propagée (`lib_divergence_warning` sur chaque résultat) — n'interrompt pas le run |
 | **14 bugs corrigés** | Critiques (3), sérieux (3), moyens (4), mineurs (4) |
 
 ---
@@ -65,7 +63,7 @@ cagoule-bench list-suites                  # suites disponibles
 
 ---
 
-## CTRSuite — cible v3.1.0 (fix AVX2 lazy-reduction)
+## CTRSuite — cible roadmap v3.0.0
 
 ```bash
 cagoule-bench run --suite ctr --format console html notebook
@@ -73,12 +71,11 @@ cagoule-bench run --suite ctr --format console html notebook
 
 | Benchmark | Mesure | Cible |
 |---|---|---|
-| `ctr-encrypt-*` vs `cbc-encrypt-*` | Gain CTR / CBC par taille | >30 MB/s Python |
-| `ctr-auto-*` | Pipeline 4x C-layer | >50 MB/s |
+| `ctr-encrypt-*` vs `cbc-encrypt-*` | Gain CTR / CBC par taille | >15 MB/s Python |
+| `ctr-auto-*` | Pipeline 4x C-layer | >25 MB/s |
 | `ctr-sym-*` | Symétrie encrypt = decrypt | ratio ≈ 1.0 |
 | `migrate-cbc-ctr-*` | Coût migration v0x01 → v0x02 | — |
-| `bulk-ctr-Nmsgs` | Amortissement KDF bulk | >120 MB/s @ 20 cœurs |
-| `encrypt-v3-*` / `decrypt-v3-*` | API C unifiée mono-message (`cagoule_encrypt_v3`) | — *(KDF par appel, non comparable aux lignes ci-dessus)* |
+| `bulk-ctr-Nmsgs` | Amortissement KDF bulk | >80 MB/s @ 20 cœurs |
 
 ---
 
@@ -96,7 +93,7 @@ cagoule-bench run --suite ctr encryption --format notebook
 ## Historique
 
 ```bash
-cagoule-bench run --db .cagoule_bench/history.db --tag v3.1.0
+cagoule-bench run --db .cagoule_bench/history.db --tag v3.0.0
 cagoule-bench history
 cagoule-bench compare-history --suite ctr --algo CAGOULE-CTR --name ctr-encrypt-1MB
 cagoule-bench compare baseline.json current.json
@@ -122,39 +119,17 @@ execute   = true
 
 ---
 
-## Résultats (CAGOULE v3.1.0, x86_64 AVX2 — fix lazy-reduction, 20 cœurs)
+## Résultats (CAGOULE v3.0.0, x86_64 AVX2, 20 cœurs)
 
-> ⚠️ **PLACEHOLDER — chiffres v3.0.0 retirés, pas encore remesurés sur v3.1.0.**
-> Les valeurs ci-dessous doivent être remplies après un run
-> `cagoule-bench run --suite ctr --format console` sur le matériel de
-> référence réel (pas un environnement virtualisé/sandbox — voir
-> `SECURITY.md` §6.1 sur la variance mono-vCPU). Ne PAS republier les
-> anciens chiffres v3.0.0 (22.3 / 21.3 / 31.0 MB/s, ×3.2) tels quels : le
-> fix AVX2 lazy-reduction change le débit CTR d'un facteur ~2x côté
-> C-layer, donc ces nombres sont maintenant faux pour v3.1.0, pas juste
-> obsolètes.
-
-| Métrique | CAGOULE-CTR (v3.1.0) | CAGOULE-CBC | Cible v3.1.0 |
-|---|---|---|---|
-| encrypt 1 MB (Python e2e) | `TBD MB/s` | `TBD MB/s` | >30 MB/s |
-| encrypt 10 MB (Python e2e) | `TBD MB/s` | `TBD MB/s` | >30 MB/s |
-| CTR 4x C-layer | `TBD MB/s` | `TBD MB/s` | >50 MB/s |
-| Speedup CTR/CBC | `TBD×` | — | ×4+ |
-| Overhead \|CT\| | \|PT\| + 65B | \|PT\| + PKCS7 + 65B | — |
-| Symétrie enc/dec | `TBD×` | — | ≈ 1.0× |
-| Bulk 20 cœurs | `TBD MB/s` | `TBD MB/s` | >120 MB/s |
-
-<!--
-Remplir après un run réel :
-  cagoule-bench run --suite ctr --format console --tag v3.1.0
-Voir aussi `cagoule-bench run --suite avx2` pour les nombres CTR-lazy-path
-(cagoule_matrix_mul_avx2_lazy, distinct du chemin CBC ci-dessus) et
-`get_backend_info_v310()` pour confirmer ctr_backend="C" / ctr_4x_available
-avant de prendre les chiffres au sérieux -- un run avec matrix_backend
-"scalar" ou lib_divergence_warning=True dans les résultats ne doit PAS
-être utilisé pour remplir ce tableau (voir orchestrator.py, tâche 1 de
-l'audit de release v3.1.0).
--->
+| Métrique | CAGOULE-CTR | CAGOULE-CBC |
+|---|---|---|
+| encrypt 1 MB | **22.3 MB/s** | 6.9 MB/s |
+| encrypt 10 MB | **21.3 MB/s** | 6.8 MB/s |
+| CTR 4x C-layer | **31.0 MB/s** | 10.8 MB/s |
+| Speedup CTR/CBC | **×3.2** | — |
+| Overhead \|CT\| | \|PT\| + 65B | \|PT\| + PKCS7 + 65B |
+| Symétrie enc/dec | **1.0×** | — |
+| Bulk 20 cœurs | **>80 MB/s** | ~40 MB/s |
 
 ---
 

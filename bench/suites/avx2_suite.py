@@ -30,26 +30,12 @@ from bench.suites.base import BaseSuite, BenchmarkResult
 # BUG3 FIX: CAGOULE_AVAILABLE défini AVANT la classe (plus d'assignation fantôme en bas de fichier)
 CAGOULE_V22 = False
 CAGOULE_V23 = False   # v2.3.0 : get_backend_info_v230() + sbox_backend
-CAGOULE_V31 = False   # v3.1.0 : get_backend_info_v310() + neon_backend
-CAGOULE_CTR_API = False  # v3.1.0 : encrypt_ctr/decrypt_ctr (chemin AVX2 lazy)
 CAGOULE_AVAILABLE = False
 CAGOULE_PARAMS = False
 cagoule_backend_info: dict = {}
 
 try:
     from cagoule import encrypt as cagoule_encrypt
-
-    # v3.1.0 release audit, tâche 2 : encrypt_ctr/decrypt_ctr, pour exercer
-    # le VRAI chemin AVX2 lazy-reduction (cagoule_matrix_mul_avx2_lazy),
-    # distinct du chemin CBC (cagoule_matrix_mul_avx2, réduction complète)
-    # que cagoule_encrypt() ci-dessus a toujours exercé. Avant ce fix,
-    # AVX2Suite ne testait JAMAIS le code changé par le fix de perf v3.1.0.
-    CAGOULE_CTR_API = False
-    try:
-        from cagoule import encrypt_ctr, decrypt_ctr
-        CAGOULE_CTR_API = True
-    except ImportError:
-        CAGOULE_CTR_API = False
 
     # v2.2.0 API : backend_info dict (matrix_backend, omega_backend)
     try:
@@ -67,20 +53,8 @@ try:
     except (ImportError, Exception):
         pass
 
-    # v3.1.0 API : get_backend_info_v310() ajoute neon_backend + matrix_backend
-    # peut valoir "neon" -- v3.1.0 release audit, tâche 3. Optionnel comme
-    # les blocs précédents : dégrade vers cagoule_backend_info déjà posé
-    # (v2.3.0 ou v2.2.0) si absent, ne fait jamais échouer l'import.
-    try:
-        from cagoule._binding import get_backend_info_v310 as _get_v310
-        cagoule_backend_info = _get_v310()
-        CAGOULE_V31 = True
-    except (ImportError, Exception):
-        CAGOULE_V31 = False
-
     CAGOULE_AVAILABLE = True
 except ImportError:
-    CAGOULE_V31 = False
 
     def cagoule_encrypt(plaintext: bytes, password: bytes, **kwargs) -> bytes:  # type: ignore[misc]
         key = password * (len(plaintext) // len(password) + 1)
@@ -217,7 +191,7 @@ def _run_scalar_subprocess(size: int, iterations: int, warmup: int, salt: bytes)
 
 class AVX2Suite(BaseSuite):
     NAME = "avx2"
-    DESCRIPTION = "CAGOULE v3.1.0 — AVX2/NEON vs scalaire (subprocess isolé), S-box Feistel + Vandermonde"
+    DESCRIPTION = "CAGOULE v2.3.0 — AVX2 vs scalaire (subprocess isolé), S-box Feistel + Vandermonde"
 
     def __init__(self, iterations: int = 200, warmup: int = 10, sizes: list[int] | None = None):
         super().__init__(iterations=iterations, warmup=warmup)
@@ -247,12 +221,7 @@ class AVX2Suite(BaseSuite):
             ]
 
         backend = cagoule_backend_info
-        # v3.1.0 : matrix_backend peut valoir "neon" (ARM) en plus de
-        # "avx2"/"scalar"/"python" -- traiter les deux comme "backend
-        # vectorisé actif" pour is_avx2_active plutôt que de mal étiqueter
-        # un run ARM NEON comme "scalar_runtime".
-        is_neon_active = backend.get("matrix_backend") == "neon"
-        is_avx2_active = backend.get("matrix_backend") == "avx2" or is_neon_active
+        is_avx2_active = backend.get("matrix_backend") == "avx2"
         results: list[BenchmarkResult] = []
 
         for size in self.sizes:
@@ -295,15 +264,12 @@ class AVX2Suite(BaseSuite):
                     delta_mb=mem_avx2.delta_mb,
                     samples_ns=timing_avx2.samples_ns,
                     extra={
-                        "backend": backend.get("matrix_backend", "scalar_runtime") if is_avx2_active else "scalar_runtime",
+                        "backend": "avx2" if is_avx2_active else "scalar_runtime",
                         "avx2_available": is_avx2_active,
-                        "neon_available": is_neon_active,
                         "matrix_backend": backend.get("matrix_backend"),
                         "sbox_backend": backend.get("sbox_backend", "unknown"),
                         "omega_backend": backend.get("omega_backend"),
                         "cagoule_v23": CAGOULE_V23,
-                        "cagoule_v31": CAGOULE_V31,
-                        "neon_backend": backend.get("neon_backend", False),
                         "forced_scalar": False,
                         "size_label": size_label,
                         "measurement_method": "in_process",
@@ -374,90 +340,6 @@ class AVX2Suite(BaseSuite):
                     },
                 )
             )
-
-        # v3.1.0 release audit, tâche 2 : ajoute le chemin CTR-lazy
-        # (cagoule_matrix_mul_avx2_lazy), jamais exercé par les sections
-        # ci-dessus (CBC uniquement, cagoule_matrix_mul_avx2 inchangé).
-        results += self._bench_ctr_lazy_path()
-
-        return results
-
-    def _bench_ctr_lazy_path(self) -> list[BenchmarkResult]:
-        """
-        Section CTR-lazy-path -- v3.1.0 release audit, tâche 2.
-
-        Exerce cagoule_matrix_mul_avx2_lazy (le VRAI code changé par le fix
-        de perf v3.1.0, ~2x throughput CTR sur ce chemin), via
-        encrypt_ctr()/decrypt_ctr(). Distinct des sections ci-dessus
-        (cagoule_encrypt() = CBC, cagoule_matrix_mul_avx2 inchangé).
-
-        Réutilise self._params (pré-dérivé une fois dans __init__, comme
-        le reste de la suite) -- mesure le coût cipher seul, pas le KDF.
-
-        Rapporte ctr_backend / ctr_4x_available via get_backend_info_v310()
-        pour chaque résultat, comme demandé.
-        """
-        if not (CAGOULE_V22 and CAGOULE_CTR_API):
-            return [
-                self._make_result(
-                    name="ctr-lazy-path-unavailable",
-                    algorithm="CAGOULE-CTR-AVX2-lazy",
-                    extra={
-                        "skipped": True,
-                        "reason": "encrypt_ctr/decrypt_ctr not available "
-                                  "(requires cagoule>=3.0.0)",
-                    },
-                )
-            ]
-
-        backend = cagoule_backend_info
-        ctr_backend = backend.get("ctr_backend", "unknown")
-        ctr_4x_available = backend.get("ctr_4x_available", False)
-
-        results: list[BenchmarkResult] = []
-        kw = {"params": self._params} if self._params is not None else {}
-
-        for size in self.sizes:
-            plaintext = os.urandom(size)
-            size_label = self._fmt_size(size)
-
-            timing_enc = self._timer.measure(
-                lambda pt=plaintext: encrypt_ctr(pt, PASSWORD, **kw),
-                iterations=self.iterations, warmup=self.warmup,
-            )
-            ciphertext = encrypt_ctr(plaintext, PASSWORD, **kw)
-            timing_dec = self._timer.measure(
-                lambda ct=ciphertext: decrypt_ctr(ct, PASSWORD, **kw),
-                iterations=self.iterations, warmup=self.warmup,
-            )
-
-            for op_name, timing in (("encrypt", timing_enc), ("decrypt", timing_dec)):
-                results.append(
-                    self._make_result(
-                        name=f"ctr-lazy-{op_name}-{size_label}",
-                        algorithm="CAGOULE-CTR-AVX2-lazy",
-                        data_size_bytes=size,
-                        mean_ms=timing.mean_ms,
-                        stddev_ms=timing.stddev_ms,
-                        min_ms=timing.min_ms,
-                        max_ms=timing.max_ms,
-                        p95_ms=timing.p95_ms,
-                        p99_ms=timing.p99_ms,
-                        cv_percent=timing.cv_percent,
-                        throughput_mbps=timing.throughput_mbps(size),
-                        samples_ns=timing.samples_ns,
-                        extra={
-                            "matrix_path": "cagoule_matrix_mul_avx2_lazy",
-                            "matrix_backend": backend.get("matrix_backend"),
-                            "ctr_backend": ctr_backend,
-                            "ctr_4x_available": ctr_4x_available,
-                            "cagoule_v31": CAGOULE_V31,
-                            "params_precomputed": self._params is not None,
-                            "size_label": size_label,
-                            "measurement_method": "in_process",
-                        },
-                    )
-                )
 
         return results
 

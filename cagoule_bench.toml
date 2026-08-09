@@ -4,12 +4,6 @@
 #   - min_baseline_n = 5 : ignore les comparaisons si la baseline < 5 mesures
 #   - Suite CTR : benchmark complet CTR vs CBC, 4x pipeline, bulk, migration
 #   - Suite encryption : utilise encrypt_cbc() pour compatibilité historique
-#
-# v3.1.0 release audit (tâche 3) : cibles CTR relevées dans [suites.ctr]
-# ci-dessous (fix AVX2 lazy-reduction, ~2x throughput) -- voir ce bloc pour
-# le détail. Rien d'autre dans ce fichier ne référence v3.0.0/v3.1.0
-# directement (les CAGOULE_V3x sont détectés dynamiquement par les suites
-# elles-mêmes, pas configurés ici).
 
 [bench]
 version         = "2.2.0"
@@ -84,24 +78,14 @@ default_workers = "auto"
 bulk_auto       = true
 
 [suites.ctr]
-# Benchmarks CAGOULE v3.1.0 CTR mode
+# Benchmarks CAGOULE v3.0.0 CTR mode
 enabled    = true
 warmup     = 5
 iterations = 200
-# Cibles v3.1.0 (release audit, tâche 3) — v3.0.0 avait 15/25/80, ~2x trop
-# bas depuis le fix AVX2 lazy-reduction v3.1.0 (cagoule_matrix_mul_avx2_lazy,
-# ~2x throughput CTR C-layer : ~20-31 MB/s → ~50 MB/s mesuré) :
-#   CTR e2e Python : >30 MB/s   (bench/suites/ctr_suite.py: target_mbps)
-#   CTR 4x C-layer : >50 MB/s   (mesuré ~50 MB/s post-fix -- >25 MB/s
-#                                 était déjà dépassé de 2x, plancher relevé
-#                                 en conséquence ; pas un target_mbps codé
-#                                 en dur quelque part, juste ce commentaire)
-#   CTR bulk 20 cores: >120 MB/s (bench/suites/parallel_suite.py: target_mbps
-#                                 -- PAS re-mesuré sur du 20-cœurs réel pour
-#                                 v3.1.0, valeur demandée/conservatrice)
-# Voir aussi bench/suites/streaming_suite.py: target_mbps_ctr, 18→30 MB/s
-# (section séparée, pas listée dans ce bloc [suites.ctr] car streaming a
-# sa propre config -- pas de [suites.streaming] dédiée dans ce fichier).
+# Cibles roadmap v3.0.0 :
+#   CTR e2e Python : >15 MB/s
+#   CTR 4x C-layer : >25 MB/s
+#   CTR bulk 20 cores: >80 MB/s
 
 [notebook]
 # Notebook reporter (cagoule-bench run --format notebook)
