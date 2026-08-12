@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cagoule-bench"
-version = "2.2.0"
+version = "2.3.0"
 description = "Suite de benchmarking cryptographique pour CAGOULE v3.0.0 — CTR mode"
 authors = [{ name = "LASS", email = "slimissa@example.com" }]
 license = { text = "MIT" }

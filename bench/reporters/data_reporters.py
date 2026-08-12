@@ -18,9 +18,12 @@ from bench.suites.base import BenchmarkResult
 # JSON
 # ──────────────────────────────────────────────────────────────
 class JsonReporter:
-    def report(self, results: list[BenchmarkResult], output_path: str | Path) -> None:
+    def report(self, results: list[BenchmarkResult], output_path: str | Path,
+               bench_version: str | None = None) -> None:
+        if bench_version is None:
+            from bench import __version__ as bench_version  # voir console_reporter.py pour la justification
         output = {
-            "cagoule_bench_version": "2.0.0",
+            "cagoule_bench_version": bench_version,
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "platform": {
                 "machine": platform.machine(),
@@ -103,7 +106,20 @@ class CsvReporter:
 # Markdown
 # ──────────────────────────────────────────────────────────────
 class MarkdownReporter:
-    def report(self, results: list[BenchmarkResult], output_path: str | Path) -> None:
+    def report(self, results: list[BenchmarkResult], output_path: str | Path,
+               bench_version: str | None = None, cagoule_version: str | None = None) -> None:
+        if bench_version is None:
+            from bench import __version__ as bench_version
+        if cagoule_version is None:
+            # CORRECTIF v2.3.0 : hardcodait "v1.2+" -- complètement obsolète
+            # (CAGOULE en est à v3.1.0). Détection dynamique, avec repli
+            # honnête si l'import échoue plutôt qu'une fausse valeur.
+            try:
+                import cagoule as _cag
+                cagoule_version = getattr(_cag, "__version__", "unknown")
+            except ImportError:
+                cagoule_version = "not-installed"
+
         lines: list[str] = []
         ts = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
 
@@ -112,7 +128,7 @@ class MarkdownReporter:
             "",
             f"**Généré le :** {ts}  ",
             f"**Plateforme :** {platform.machine()} / Python {platform.python_version()}  ",
-            "**CAGOULE :** v1.2+  ",
+            f"**CAGOULE :** v{cagoule_version}  ",
             "",
         ]
 
@@ -132,7 +148,7 @@ class MarkdownReporter:
 
         lines += [
             "---",
-            "_Benchmarks générés par [cagoule-bench](https://github.com/slimissa/cagoule-bench) v2.0.0_",
+            f"_Benchmarks générés par [cagoule-bench](https://github.com/slimissa/cagoule-bench) v{bench_version}_",
         ]
 
         Path(output_path).write_text("\n".join(lines), encoding="utf-8")

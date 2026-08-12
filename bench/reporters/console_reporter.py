@@ -33,8 +33,36 @@ def _overhead_str(a_tp: float, b_tp: float) -> str:
     return f"[{color}]{sign}{pct:.1f}%[/{color}]"
 
 
-def _detect_cagoule_backend(results: list[BenchmarkResult]) -> tuple[str, str]:
-    """Extrait matrix_backend et omega_backend depuis les extras."""
+def _detect_cagoule_backend(
+    results: list[BenchmarkResult],
+    backend_info: dict | None = None,
+) -> tuple[str, str]:
+    """
+    Résout matrix_backend et omega_backend pour l'affichage.
+
+    CORRECTIF (v2.3.0) : dépendait EXCLUSIVEMENT de la présence d'un champ
+    matrix_backend dans les extras du PREMIER résultat -- seules
+    avx2_suite.py et encryption_suite.py posent ce champ. ctr_suite.py,
+    streaming_suite.py et parallel_suite.py ne le posent jamais (leurs
+    extras portent d'autres métadonnées : kdf_calls, mode, workers...),
+    donc le panneau de fin de run affichait "matrix: ?  omega: ?" pour
+    CES suites précises, alors même que l'en-tête de DÉBUT de run
+    (imprimé par orchestrator.py, source différente) affichait déjà la
+    bonne valeur. Confirmé en confrontant un run réel : "matrix: avx2
+    omega: C" dans l'en-tête, "matrix: ?  omega: ?" dans le panneau de
+    fin, pour le même run, sur les suites ctr/streaming/parallel.
+
+    Fix : accepter backend_info (dict get_backend_info_v310()/v300(),
+    même source que l'en-tête de orchestrator.py) en priorité -- ne
+    retomber sur le scavenging des extras que si l'appelant ne fournit
+    rien (ex. un appel direct à ConsoleReporter().report(results) hors
+    orchestrator, comme dans certains tests).
+    """
+    if backend_info:
+        return (
+            backend_info.get("matrix_backend", "?"),
+            backend_info.get("omega_backend", "?"),
+        )
     for r in results:
         if "matrix_backend" in r.extra:
             return (
@@ -45,16 +73,36 @@ def _detect_cagoule_backend(results: list[BenchmarkResult]) -> tuple[str, str]:
 
 
 class ConsoleReporter:
-    def report(self, results: list[BenchmarkResult], suite_name: str = "") -> None:
-        matrix_backend, omega_backend = _detect_cagoule_backend(results)
-        backend_color = "green" if matrix_backend == "avx2" else "yellow"
+    def report(
+        self,
+        results: list[BenchmarkResult],
+        suite_name: str = "",
+        backend_info: dict | None = None,
+        bench_version: str | None = None,
+    ) -> None:
+        matrix_backend, omega_backend = _detect_cagoule_backend(results, backend_info)
+        # v3.1.0 : "neon" est un backend actif valide au même titre que
+        # "avx2" -- ne pas l'afficher en jaune comme un backend dégradé.
+        backend_color = "green" if matrix_backend in ("avx2", "neon") else "yellow"
+
+        if bench_version is None:
+            # Import différé (pas au niveau module) : console_reporter.py
+            # est importé PAR bench/__init__.py -- un `from bench import
+            # __version__` au niveau module ici serait un import circulaire
+            # fragile. Au moment où report() est réellement APPELÉE,
+            # bench/__init__.py a fini de s'exécuter depuis longtemps ;
+            # cet import différé est donc sûr. orchestrator.py passe déjà
+            # bench_version explicitement -- ce repli ne sert qu'aux
+            # appels directs de ConsoleReporter().report(results) hors
+            # orchestrator (tests, usage bibliothèque).
+            from bench import __version__ as bench_version
 
         console.print()
         console.print(
             Panel(
                 Text.assemble(
                     ("cagoule-bench ", "bold cyan"),
-                    ("v2.2.0", "bold white"),
+                    (f"v{bench_version}", "bold white"),
                     ("  |  ", "dim"),
                     (platform.machine(), "yellow"),
                     ("  |  ", "dim"),
@@ -67,7 +115,7 @@ class ConsoleReporter:
                     ("  |  ", "dim"),
                     (time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()), "dim"),
                 ),
-                title="[bold blue]CAGOULE-BENCH v2.2.0[/bold blue]",
+                title=f"[bold blue]CAGOULE-BENCH v{bench_version}[/bold blue]",
                 border_style="blue",
             )
         )
@@ -447,21 +495,28 @@ class ConsoleReporter:
     def _render_avx2(self, results: list[BenchmarkResult]) -> None:
         avx2_results = [r for r in results if r.algorithm == "CAGOULE-AVX2"]
         scalar_results = [r for r in results if r.algorithm == "CAGOULE-Scalar"]
+        # v2.3.0 : nouvelle section CTR-lazy-path, distincte de la
+        # comparaison CBC ci-dessous -- voir _render_ctr_lazy() plus bas.
+        ctr_lazy_results = [r for r in results if r.algorithm == "CAGOULE-CTR-AVX2-lazy"]
 
         if not avx2_results:
-            console.print("[yellow]CAGOULE v2.2.0 non disponible — skip AVX2 suite[/yellow]")
-            return
+            console.print("[yellow]Backend AVX2 CAGOULE non disponible — skip section CBC AVX2 vs Scalar[/yellow]")
+        else:
+            console.print("\n[bold green]CAGOULE — CBC : Vectorisation AVX2 vs Scalaire[/bold green]")
+            console.print(
+                "  [dim](chemin cagoule_matrix_mul_avx2, réduction complète, inchangé depuis v3.0.0 --"
+                " voir la section CTR-lazy-path ci-dessous pour le fix de perf v3.1.0)[/dim]"
+            )
 
-        console.print("\n[bold green]CAGOULE v2.2.0 — Vectorisation AVX2 vs Scalaire[/bold green]")
-
-        is_avx2 = avx2_results[0].extra.get("avx2_available", False)
-        matrix_be = avx2_results[0].extra.get("matrix_backend", "?")
-        omega_be = avx2_results[0].extra.get("omega_backend", "?")
-        console.print(
-            f"  [dim]matrix_backend:[/dim] [bold {'green' if is_avx2 else 'yellow'}]{matrix_be}[/bold {'green' if is_avx2 else 'yellow'}]"
-            f"  [dim]omega_backend:[/dim] [cyan]{omega_be}[/cyan]"
-            f"  [dim]AVX2 actif:[/dim] [{'green' if is_avx2 else 'red'}]{'✓ OUI' if is_avx2 else '✗ NON (fallback scalaire)'}[/{'green' if is_avx2 else 'red'}]"
-        )
+        is_avx2 = avx2_results[0].extra.get("avx2_available", False) if avx2_results else False
+        matrix_be = avx2_results[0].extra.get("matrix_backend", "?") if avx2_results else "?"
+        omega_be = avx2_results[0].extra.get("omega_backend", "?") if avx2_results else "?"
+        if avx2_results:
+            console.print(
+                f"  [dim]matrix_backend:[/dim] [bold {'green' if is_avx2 else 'yellow'}]{matrix_be}[/bold {'green' if is_avx2 else 'yellow'}]"
+                f"  [dim]omega_backend:[/dim] [cyan]{omega_be}[/cyan]"
+                f"  [dim]AVX2 actif:[/dim] [{'green' if is_avx2 else 'red'}]{'✓ OUI' if is_avx2 else '✗ NON (fallback scalaire)'}[/{'green' if is_avx2 else 'red'}]"
+            )
 
         t = Table(box=box.ROUNDED, border_style="green", header_style="bold green on black")
         t.add_column("Taille", style="white", justify="right")
@@ -502,12 +557,48 @@ class ConsoleReporter:
             target = 25.0
             status_c = "green" if avg_gain >= target else ("yellow" if avg_gain >= 10 else "red")
             console.print(
-                f"\n  [bold]Gain moyen AVX2 :[/bold] [{status_c}]{avg_gain:.1f}%[/{status_c}]  "
-                f"[dim](objectif roadmap v2.2.0 : ≥ +25%)[/dim]"
+                f"\n  [bold]Gain moyen AVX2 (CBC) :[/bold] [{status_c}]{avg_gain:.1f}%[/{status_c}]  "
+                f"[dim](cible historique ≥ +25% -- comparaison CBC uniquement, ne reflète PAS"
+                f" le fix de perf v3.1.0 : voir CTR-lazy-path ci-dessous)[/dim]"
             )
         console.print(
             "[dim]Note: CAGOULE_FORCE_SCALAR=1 utilisé pour mesurer le chemin scalaire[/dim]"
         )
+
+        if ctr_lazy_results:
+            self._render_ctr_lazy(ctr_lazy_results)
+
+    def _render_ctr_lazy(self, results: list[BenchmarkResult]) -> None:
+        """
+        v2.3.0 : rendu de la section CTR-lazy-path (cagoule_matrix_mul_avx2_lazy)
+        -- le VRAI chemin changé par le fix de perf v3.1.0, distinct de la
+        comparaison CBC ci-dessus (cagoule_matrix_mul_avx2, inchangée).
+        """
+        console.print("\n[bold green]CAGOULE — CTR-lazy-path (fix de perf v3.1.0)[/bold green]")
+        console.print(
+            "  [dim](cagoule_matrix_mul_avx2_lazy, via encrypt_ctr/decrypt_ctr --"
+            " ~2x le débit CTR C-layer vs avant le fix)[/dim]"
+        )
+
+        r0 = results[0]
+        ctr_backend = r0.extra.get("ctr_backend", "?")
+        ctr_4x = r0.extra.get("ctr_4x_available", False)
+        console.print(
+            f"  [dim]ctr_backend:[/dim] [bold {'green' if ctr_backend == 'C' else 'yellow'}]{ctr_backend}[/bold {'green' if ctr_backend == 'C' else 'yellow'}]"
+            f"  [dim]ctr_4x_available:[/dim] [{'green' if ctr_4x else 'yellow'}]{ctr_4x}[/{'green' if ctr_4x else 'yellow'}]"
+        )
+
+        t = Table(box=box.ROUNDED, border_style="green", header_style="bold green on black")
+        t.add_column("Opération", style="white")
+        t.add_column("Taille", justify="right")
+        t.add_column("Débit (MB/s)", justify="right", style="bold green")
+        t.add_column("Mean (ms)", justify="right", style="dim")
+
+        for r in results:
+            op = "encrypt" if "encrypt" in r.name else "decrypt"
+            size_label = r.extra.get("size_label", "?")
+            t.add_row(op, size_label, f"{r.throughput_mbps:.1f}", f"{r.mean_ms:.3f}")
+        console.print(t)
 
     # ── Generic ───────────────────────────────────────────────────────────────
 

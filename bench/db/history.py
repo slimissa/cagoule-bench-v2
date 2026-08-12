@@ -232,6 +232,7 @@ class HistoryDB:
         name: str,
         n: int = 20,
         tag: str | None = None,
+        cagoule_version: str | None = None,
     ) -> list[TrendPoint]:
         """
         Récupère les N derniers points d'un benchmark spécifique.
@@ -240,38 +241,45 @@ class HistoryDB:
             suite, algorithm, name: identifiant du benchmark
             n: nombre de points (défaut: 20)
             tag: filtrer par tag Git/branch (None = tous)
+            cagoule_version: filtrer par version exacte de CAGOULE (None = toutes)
+
+        CORRECTIF (v3.1.0 release audit) : cette méthode ne filtrait jamais
+        par cagoule_version, malgré la colonne existant sur `runs` depuis le
+        schema v2. Résultat concret : v3.1.0 mesure ~50 MB/s en CTR (AVX2
+        lazy-reduction fix) contre ~20-31 MB/s pré-fix -- un historique
+        mélangeant les deux versions produit un baseline_avg qui n'est ni
+        l'un ni l'autre, faussant detect_regression() dans les deux sens
+        (masque une vraie régression post-v3.1.0, ou déclenche une fausse
+        alerte sur un run v3.1.0 normal comparé à un passé v3.0.0 plus lent
+        -- ce dernier cas ne se produirait pas ici car le seuil ne réagit
+        qu'aux baisses, mais le premier cas, lui, est réel). Filtrer par
+        version rend la comparaison same-version, ce qui est le seul
+        baseline qui a un sens après un changement de perf aussi large.
 
         Returns:
             list[TrendPoint] du plus ancien au plus récent
         """
         c = self._conn.cursor()
+        query = """
+            SELECT r.run_id, r.timestamp, r.tag,
+                   res.mean_ms, res.throughput_mbps, res.stddev_ms, res.p95_ms
+            FROM results res
+            JOIN runs r USING (run_id)
+            WHERE res.suite = ? AND res.algorithm = ? AND res.name = ?
+        """
+        params: list = [suite, algorithm, name]
+
         if tag:
-            rows = c.execute(
-                """
-                SELECT r.run_id, r.timestamp, r.tag,
-                       res.mean_ms, res.throughput_mbps, res.stddev_ms, res.p95_ms
-                FROM results res
-                JOIN runs r USING (run_id)
-                WHERE res.suite = ? AND res.algorithm = ? AND res.name = ?
-                  AND r.tag = ?
-                ORDER BY r.timestamp DESC, r.rowid DESC
-                LIMIT ?
-            """,
-                (suite, algorithm, name, tag, n),
-            ).fetchall()
-        else:
-            rows = c.execute(
-                """
-                SELECT r.run_id, r.timestamp, r.tag,
-                       res.mean_ms, res.throughput_mbps, res.stddev_ms, res.p95_ms
-                FROM results res
-                JOIN runs r USING (run_id)
-                WHERE res.suite = ? AND res.algorithm = ? AND res.name = ?
-                ORDER BY r.timestamp DESC, r.rowid DESC
-                LIMIT ?
-            """,
-                (suite, algorithm, name, n),
-            ).fetchall()
+            query += " AND r.tag = ?"
+            params.append(tag)
+        if cagoule_version:
+            query += " AND r.cagoule_version = ?"
+            params.append(cagoule_version)
+
+        query += " ORDER BY r.timestamp DESC, r.rowid DESC LIMIT ?"
+        params.append(n)
+
+        rows = c.execute(query, params).fetchall()
 
         return [
             TrendPoint(
@@ -362,24 +370,41 @@ class HistoryDB:
         n_baseline: int = 5,
         threshold_pct: float = -5.0,
         tag: str | None = None,
+        cagoule_version: str | None = None,
+        cross_version_ok: bool = False,
     ) -> tuple[bool, list[str]]:
         """
         Compare les résultats actuels avec la moyenne des N derniers runs.
 
         Plus robuste que la comparaison baseline-unique : immune aux one-off anomalies.
 
+        CORRECTIF (v3.1.0 release audit) : par défaut, le baseline n'inclut
+        désormais que des runs de la MÊME version CAGOULE que celle utilisée
+        pour produire `results` (déduite de `results[0].extra` si possible,
+        sinon passée explicitement via `cagoule_version`). Passer
+        cross_version_ok=True restaure l'ancien comportement (baseline toutes
+        versions confondues) -- à utiliser seulement si on sait ce qu'on fait
+        (ex. étudier l'effet d'une migration de version delibérément).
+
         Returns:
             (passed: bool, messages: list[str])
         """
         regressions: list[str] = []
         ok_count = 0
+        skipped_no_baseline = 0
+
+        effective_version = None if cross_version_ok else cagoule_version
 
         for r in results:
             if r.throughput_mbps == 0:
                 continue
-            trend = self.get_trend(r.suite, r.algorithm, r.name, n=n_baseline, tag=tag)
+            trend = self.get_trend(
+                r.suite, r.algorithm, r.name, n=n_baseline, tag=tag,
+                cagoule_version=effective_version,
+            )
             if len(trend) < 2:
-                continue  # pas assez d'historique
+                skipped_no_baseline += 1
+                continue  # pas assez d'historique (same-version)
 
             baseline_tp = sum(t.throughput_mbps for t in trend) / len(trend)
             if baseline_tp == 0:

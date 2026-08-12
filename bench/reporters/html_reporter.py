@@ -321,7 +321,10 @@ if (DATA.par_labels) {
 
 
 class HtmlReporter:
-    def report(self, results: list[BenchmarkResult], output_path: str | Path) -> None:
+    def report(self, results: list[BenchmarkResult], output_path: str | Path,
+               bench_version: str | None = None) -> None:
+        if bench_version is None:
+            from bench import __version__ as bench_version
         enc = [r for r in results if r.suite == "encryption"]
         kdf = [r for r in results if r.suite == "kdf" and r.algorithm == "Argon2id"]
         mem = [r for r in results if r.suite == "memory" and "entries" in r.name]

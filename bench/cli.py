@@ -1,5 +1,5 @@
 """
-bench/cli.py — CLI cagoule-bench v2.0.0
+bench/cli.py — CLI cagoule-bench
 
 Commandes :
   run             Lance les benchmarks (suites, itérations, formats)
@@ -34,6 +34,13 @@ from bench.config import BenchConfig
 from bench.orchestrator import _CAGOULE_BACKEND, CAGOULE_VERSION, BenchmarkError, Orchestrator
 from bench.suites import ALL_SUITES
 
+# v2.3.0 : source unique de version -- plusieurs bannières/`--version`
+# affichaient encore "2.0.0" en dur (bench.__init__.__version__ était déjà
+# à 2.2.0). BENCH_VERSION référencé partout dans ce fichier au lieu de
+# chaînes littérales dupliquées, pour que ce type de dérive ne puisse
+# plus se reproduire.
+from bench import __version__ as BENCH_VERSION
+
 console = Console()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -62,10 +69,10 @@ def _load_json_results(path: str) -> list[dict]:
 
 
 @click.group()
-@click.version_option("2.0.0", prog_name="cagoule-bench")
+@click.version_option(BENCH_VERSION, prog_name="cagoule-bench")
 def main():
     """
-    cagoule-bench v2.0.0 — Suite de benchmarking cryptographique pour CAGOULE.
+    cagoule-bench — Suite de benchmarking cryptographique pour CAGOULE.
 
     \b
     Exemples rapides :
@@ -525,7 +532,7 @@ def info():
     import platform as pl
 
     console.print()
-    console.rule("[bold blue]cagoule-bench v2.0.0 — Environment Info[/bold blue]")
+    console.rule(f"[bold blue]cagoule-bench v{BENCH_VERSION} — Environment Info[/bold blue]")
 
     # Système
     t_sys = Table(box=box.SIMPLE, border_style="dim", header_style="bold dim")
@@ -562,9 +569,23 @@ def info():
     backend = _CAGOULE_BACKEND
     matrix_be = backend.get("matrix_backend", "N/A")
     omega_be = backend.get("omega_backend", "N/A")
-    be_c = "green" if matrix_be == "avx2" else "yellow"
+    # v3.1.0 : matrix_backend peut valoir "neon" (ARM) -- toujours vert,
+    # au même titre que "avx2" (les deux sont des backends vectorisés actifs).
+    be_c = "green" if matrix_be in ("avx2", "neon") else "yellow"
     t_cag.add_row("matrix_backend", f"[{be_c}]{matrix_be}[/{be_c}]")
     t_cag.add_row("omega_backend", f"[cyan]{omega_be}[/cyan]")
+    # v3.1.0 release audit, tâche 3 : neon_backend n'existe que si
+    # get_backend_info_v310() a pu être appelée (voir orchestrator.py) --
+    # absent (pas juste False) sur un cagoule <3.1.0 ou sans le fix. On
+    # affiche "N/A" plutôt que "False" dans ce cas pour ne pas laisser
+    # croire qu'une détection a eu lieu et a échoué.
+    if "neon_backend" in backend:
+        neon_active = backend.get("neon_backend", False)
+        neon_c = "green" if neon_active else "dim"
+        neon_label = "✓ active" if neon_active else "✗ not active"
+        t_cag.add_row("neon_backend", f"[{neon_c}]{neon_label}[/{neon_c}]")
+    else:
+        t_cag.add_row("neon_backend", "[dim]N/A (requires cagoule>=3.1.0 w/ get_backend_info_v310)[/dim]")
     t_cag.add_row(
         "CGL1 format",
         (
@@ -608,7 +629,7 @@ def info():
 def list_suites():
     """Liste toutes les suites disponibles."""
     t = Table(
-        title="Suites disponibles — cagoule-bench v2.0.0",
+        title=f"Suites disponibles — cagoule-bench v{BENCH_VERSION}",
         box=box.ROUNDED,
         border_style="blue",
         header_style="bold blue on black",
