@@ -1,23 +1,23 @@
-# cagoule-bench v2.2.0
+# cagoule-bench v2.3.0
 
 Suite de benchmarking académique officielle pour **CAGOULE** — Cryptographie Algébrique Géométrique par Ondes et Logique Entrelacée.
 
-> **Compatibilité cible :** CAGOULE v3.0.0+ (CTR mode · AVX2 4x · `encrypt_ctr` · `encrypt_bulk_ctr`)  
-> Compatible descendante : CAGOULE v2.2.0+ (CBC uniquement)
+> **Compatibilité cible :** CAGOULE v3.1.0 (CTR mode · AVX2 lazy reduction · `encrypt_ctr` · `encrypt_v3` · streaming API)  
+> Compatible descendante : CAGOULE v3.0.0+ (CTR) · v2.2.0+ (CBC uniquement)
 
 ---
 
-## Nouveautés v2.2.0
+## Nouveautés v2.3.0
 
 | Feature | Description |
 |---|---|
-| **CTRSuite** | Benchmark CTR vs CBC, pipeline 4x, symétrie encrypt/decrypt, migration, bulk KDF |
-| **EncryptionSuite** | `encrypt_cbc()` historique + `encrypt_ctr()` séparé — HistoryDB par mode |
-| **ParallelSuite** | `encrypt_bulk_ctr` ProcessPool — cible >80 MB/s à 20 cœurs |
-| **StreamingSuite** | CTR streaming — cible >18 MB/s vs ~7.8 MB/s CBC |
-| **AVX2Suite** | Bloc CTR 4x — gain ILP des 4 blocs simultanés |
-| **Notebook Reporter** | `.ipynb` pré-exécuté (Option B) — 7 graphiques Matplotlib/Seaborn inline |
-| **14 bugs corrigés** | Critiques (3), sérieux (3), moyens (4), mineurs (4) |
+| **History DB version filter** | Regression detection filters by `cagoule_version` — no cross-version blending |
+| **`_find_lib()` warning surfaced** | Stale `.so` divergence detected, logged, flagged in results |
+| **CTR-lazy-path benchmark** | AVX2 suite now exercises `encrypt_ctr`/`decrypt_ctr` with `get_backend_info_v310()` |
+| **`encrypt_v3` benchmark** | Unified C API benchmark in CTR suite, with graceful degradation |
+| **Streaming Python binding** | `CagouleStreamCtx` context manager, automatic buffer sizing |
+| **NEON detection** | `get_backend_info_v310()` reports `neon_backend`, `matrix_backend: neon` on ARM |
+| **Throughput targets updated** | 30 MB/s Python e2e · 120 MB/s parallel · 30 MB/s streaming |
 
 ---
 
@@ -30,9 +30,10 @@ cd cagoule-bench-v2
 python3 -m venv venv
 source venv/bin/activate
 
-pip install -e ".[dev]"
-pip install "cagoule>=3.0.0"
-pip install -e ".[notebook]"  # optionnel
+# Install CAGOULE first (local, not PyPI — not published there yet)
+pip install -e /path/to/CAGOULE_v3_1_0 --no-deps
+pip install -e ".[dev]" --no-deps
+pip install cryptography argon2-cffi psutil rich click jinja2 pytest
 ```
 
 ---
@@ -40,11 +41,13 @@ pip install -e ".[notebook]"  # optionnel
 ## Démarrage rapide
 
 ```bash
-cagoule-bench run                          # toutes les suites sauf avx2
-cagoule-bench run --suite ctr              # CTR vs CBC (v3.0.0 requis)
-cagoule-bench run --suite ctr --format notebook  # rapport Jupyter
-cagoule-bench info                         # environnement
-cagoule-bench list-suites                  # suites disponibles
+cagoule-bench info                         # environnement — vérifie NEON, CTR backend
+cagoule-bench run --suite ctr              # CTR vs CBC
+cagoule-bench run --suite avx2             # AVX2 vs Scalar + CTR-lazy-path
+cagoule-bench run --suite encryption       # vs AES-256-GCM vs ChaCha20-Poly1305
+cagoule-bench run --suite parallel         # ProcessPool scaling
+cagoule-bench run --suite streaming        # Large file streaming
+cagoule-bench run --suite ctr --format notebook  # 7 chartes Jupyter
 ```
 
 ---
@@ -54,101 +57,47 @@ cagoule-bench list-suites                  # suites disponibles
 | Suite | Description | CAGOULE |
 |---|---|---|
 | `encryption` | CAGOULE (CBC + CTR) vs AES-256-GCM vs ChaCha20-Poly1305 | v2.2.0+ |
-| `ctr` | CTR vs CBC, 4x pipeline, symétrie, migration, bulk | **v3.0.0+** |
+| `ctr` | CTR vs CBC, 4x pipeline, symétrie, migration, bulk, `encrypt_v3` | v3.1.0+ |
 | `kdf` | Argon2id × 27 + PBKDF2 + scrypt × 3 | v2.2.0+ |
 | `memory` | Vault scaling + cache + fragmentation | v2.2.0+ |
 | `parallel` | ProcessPool 1–20 workers + encrypt_bulk_ctr | v3.0.0+ |
 | `streaming` | 50/100/500 MB — CTR + CBC | v3.0.0+ |
-| `avx2` | AVX2 vs Scalaire + CTR 4x — opt-in (`--avx2`) | v2.2.0+ |
+| `avx2` | AVX2 vs Scalar + CTR-lazy-path + NEON detection | v2.2.0+ |
 
 ---
 
-## CTRSuite — cible roadmap v3.0.0
-
-```bash
-cagoule-bench run --suite ctr --format console html notebook
-```
-
-| Benchmark | Mesure | Cible |
-|---|---|---|
-| `ctr-encrypt-*` vs `cbc-encrypt-*` | Gain CTR / CBC par taille | >15 MB/s Python |
-| `ctr-auto-*` | Pipeline 4x C-layer | >25 MB/s |
-| `ctr-sym-*` | Symétrie encrypt = decrypt | ratio ≈ 1.0 |
-| `migrate-cbc-ctr-*` | Coût migration v0x01 → v0x02 | — |
-| `bulk-ctr-Nmsgs` | Amortissement KDF bulk | >80 MB/s @ 20 cœurs |
-
----
-
-## Notebook Reporter
-
-```bash
-pip install 'cagoule-bench[notebook]'
-cagoule-bench run --suite ctr encryption --format notebook
-```
-
-7 graphiques pré-exécutés : débit, latence p95/p99, CTR vs CBC speedup, Amdahl parallèle, overhead CT, heatmap Mersenne-64, conclusions automatiques.
-
----
-
-## Historique
-
-```bash
-cagoule-bench run --db .cagoule_bench/history.db --tag v3.0.0
-cagoule-bench history
-cagoule-bench compare-history --suite ctr --algo CAGOULE-CTR --name ctr-encrypt-1MB
-cagoule-bench compare baseline.json current.json
-```
-
----
-
-## Configuration
-
-```toml
-# cagoule_bench.toml
-iterations = 500
-warmup     = 10
-formats    = ["console", "json", "html"]
-db_path    = ".cagoule_bench/history.db"
-
-[suites.ctr]
-iterations = 200
-
-[notebook]
-execute   = true
-```
-
----
-
-## Résultats (CAGOULE v3.0.0, x86_64 AVX2, 20 cœurs)
+## Résultats (CAGOULE v3.1.0, x86_64 AVX2, 20 cœurs)
 
 | Métrique | CAGOULE-CTR | CAGOULE-CBC |
 |---|---|---|
-| encrypt 1 MB | **22.3 MB/s** | 6.9 MB/s |
-| encrypt 10 MB | **21.3 MB/s** | 6.8 MB/s |
-| CTR 4x C-layer | **31.0 MB/s** | 10.8 MB/s |
-| Speedup CTR/CBC | **×3.2** | — |
-| Overhead \|CT\| | \|PT\| + 65B | \|PT\| + PKCS7 + 65B |
-| Symétrie enc/dec | **1.0×** | — |
-| Bulk 20 cœurs | **>80 MB/s** | ~40 MB/s |
+| encrypt 1 MB (Python e2e) | **21.9 MB/s** | 4.0 MB/s |
+| encrypt 10 MB (Python e2e) | **19.9 MB/s** | 3.9 MB/s |
+| CTR 4x C-layer | **65.1 MB/s** | 10.8 MB/s |
+| Speedup CTR/CBC | **×5.3** | — |
+| Symétrie enc/dec | **~1.0×** | — |
+| Bulk KDF amortization (100 msgs) | **12.05×** | — |
+| Parallel peak (16 workers) | **142.2 MB/s** | — |
+| Streaming (500 MB) | **20.0 MB/s** | 20.0 MB/s |
 
----
+**Comparaison (encrypt 1 MB):**
 
-## Tests
+| Algorithme | Throughput | vs CAGOULE-CTR |
+|---|---|---|
+| AES-256-GCM | 2,370 MB/s | ×108 faster |
+| ChaCha20-Poly1305 | 912 MB/s | ×42 faster |
+| CAGOULE-CTR | 21.9 MB/s | — |
 
-```bash
-pytest tests/ -v                    # 117 tests
-pytest tests/ -v -m slow            # 3 tests lents
-pytest tests/ --cov=bench           # couverture
-```
+**Méthodologie :** mesuré sur x86-64 Linux, 20 cœurs, avec `--iterations 30 --warmup 5`. Les chiffres dépendent du hardware — re-mesurer sur votre cible avant de citer.
 
 ---
 
 ## Roadmap
 
-- **v2.0.0** ✅ Streaming, AVX2, HistoryDB, Mann-Whitney, HTML dashboard, CI multi-arch
-- **v2.1.0** ✅ Notebook Reporter — `.ipynb` pré-exécuté, 7 graphiques
-- **v2.2.0** ✅ CTRSuite + CAGOULE v3.0.0 (CTR, encrypt_bulk_ctr, migration, streaming CTR)
-- **v2.3.0** 🔜 WASM + benchmark browser (QuantOS Cloud Shell)
+- **v2.0.0** ✅ Streaming, AVX2, HistoryDB
+- **v2.1.0** ✅ Notebook Reporter
+- **v2.2.0** ✅ CTRSuite + CAGOULE v3.0.0
+- **v2.3.0** ✅ v3.1.0 compatibility, history DB fix, NEON detection, `encrypt_v3` benchmark
+- **v2.4.0** 🔜 WASM + benchmark browser (QuantOS Cloud Shell)
 
 ---
 
@@ -158,3 +107,6 @@ MIT — [LICENSE](LICENSE)
 
 **LASS** — QuantOS CTO  
 [github.com/slimissa/cagoule-bench-v2](https://github.com/slimissa/cagoule-bench-v2) · [github.com/slimissa/cagoule](https://github.com/slimissa/cagoule)
+```
+
+---
